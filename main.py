@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import List
 import os
 import subprocess
 
@@ -7,8 +8,9 @@ app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return {"Hello"}
+    return {"Hello": "World"}
 
+# --- Endpoint para crear representante (original) ---
 class CreateRepresentativeRequest(BaseModel):
     model_name: str
     from_model: str
@@ -40,3 +42,17 @@ def create_representative(req: CreateRepresentativeRequest):
         raise HTTPException(status_code=500, detail=f"Error running ollama create: {e.stderr}")
 
     return {"message": f"Representative '{req.model_name}' created successfully.", "output": result.stdout}
+
+# --- Nuevo endpoint para recibir números de teléfono ---
+class PhoneNumbersRequest(BaseModel):
+    numbers: List[str]
+
+@app.post("/sendNumbers")
+def send_numbers(req: PhoneNumbersRequest):
+    # Aquí puedes hacer lo que quieras con la lista de números
+    print("Números recibidos:", req.numbers)
+    try:
+        # Aquí podrías llamar a otro servicio, guardar en base de datos, etc.
+        return {"message": "Números recibidos correctamente", "count": len(req.numbers)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error procesando los números: {e}")
