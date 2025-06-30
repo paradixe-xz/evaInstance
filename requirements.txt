@@ -6,4 +6,4 @@ pygame
 ollama 
 python-multipart
 pydub
-TTS
+elevenlabs

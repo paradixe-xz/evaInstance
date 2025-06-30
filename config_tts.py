@@ -1,52 +1,64 @@
 """
-Configuración para el TTS mejorado
+Configuración para ElevenLabs TTS
 """
 
 import os
 
-# Configuración de TTS
-TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')
-
-# Opciones disponibles:
-# - "gtts_improved": Google TTS con mejor configuración (requiere internet)
-# - "pyttsx3": TTS offline usando voces del sistema (no requiere internet)
+# Configuración de ElevenLabs
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')
 
 def get_tts_info():
-    """Obtiene información sobre el método de TTS configurado"""
-    if TTS_METHOD == "gtts_improved":
+    """Obtiene información sobre la configuración de ElevenLabs"""
+    if ELEVENLABS_API_KEY:
         return {
-            "method": "Google TTS Mejorado",
+            "method": "ElevenLabs TTS",
             "requires_internet": True,
-            "language": "Español",
-            "quality": "Buena",
-            "speed": "Normal"
-        }
-    elif TTS_METHOD == "pyttsx3":
-        return {
-            "method": "TTS Offline (pyttsx3)",
-            "requires_internet": False,
-            "language": "Depende de voces del sistema",
-            "quality": "Variable",
-            "speed": "Configurable"
+            "language": "Español (Multilingüe)",
+            "quality": "Premium",
+            "speed": "Rápida",
+            "voice_id": ELEVENLABS_VOICE_ID,
+            "status": "Configurado"
         }
     else:
         return {
-            "method": "Desconocido",
+            "method": "ElevenLabs TTS",
             "requires_internet": True,
-            "language": "Español",
-            "quality": "Básica",
-            "speed": "Normal"
+            "language": "Español (Multilingüe)",
+            "quality": "Premium",
+            "speed": "Rápida",
+            "voice_id": ELEVENLABS_VOICE_ID,
+            "status": "No configurado - Falta API Key"
         }
 
 def print_tts_status():
     """Imprime el estado actual del TTS"""
     info = get_tts_info()
-    print("🎤 Configuración de TTS:")
+    print("🎤 Configuración de ElevenLabs TTS:")
     print(f"   Método: {info['method']}")
     print(f"   Requiere internet: {'Sí' if info['requires_internet'] else 'No'}")
     print(f"   Idioma: {info['language']}")
     print(f"   Calidad: {info['quality']}")
     print(f"   Velocidad: {info['speed']}")
+    print(f"   Voice ID: {info['voice_id']}")
+    print(f"   Estado: {info['status']}")
+
+def get_available_voices():
+    """Obtiene las voces disponibles de ElevenLabs"""
+    try:
+        from elevenlabs import voices
+        if ELEVENLABS_API_KEY:
+            available_voices = voices()
+            return [{"id": voice.voice_id, "name": voice.name} for voice in available_voices]
+        else:
+            return []
+    except Exception as e:
+        print(f"Error obteniendo voces: {e}")
+        return []
 
 if __name__ == "__main__":
-    print_tts_status() 
+    print_tts_status()
+    print("\nVoces disponibles:")
+    voices = get_available_voices()
+    for voice in voices[:5]:  # Mostrar solo las primeras 5
+        print(f"   {voice['name']} (ID: {voice['id']})") 

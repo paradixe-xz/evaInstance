@@ -10,7 +10,7 @@ import threading
 import queue
 import time
 from pydub import AudioSegment
-from TTS.api import TTS
+from elevenlabs import generate, save, set_api_key
 
 mixer.init()
 
@@ -24,29 +24,32 @@ numaudio = 0
 
 messages = []
 
-# Configuración de TTS mejorado
-TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')
+# ElevenLabs config
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')
 
-tts_model = None
-def get_tts_model():
-    global tts_model
-    if tts_model is None:
-        tts_model = TTS(model_name="tts_models/es/css10/vits")
-    return tts_model
+if ELEVENLABS_API_KEY:
+    set_api_key(ELEVENLABS_API_KEY)
 
-def generate_speech_coqui(text, wavfile):
-    """Genera audio usando Coqui TTS y lo convierte a WAV 8kHz mono"""
+def generate_speech_elevenlabs(text, wavfile):
+    """Genera audio usando ElevenLabs"""
     try:
-        temp_wav = "temp_coqui.wav"
-        tts = get_tts_model()
-        tts.tts_to_file(text=text, file_path=temp_wav)
-        audio = AudioSegment.from_file(temp_wav)
-        audio = audio.set_frame_rate(8000).set_channels(1)
-        audio.export(wavfile, format="wav")
-        os.remove(temp_wav)
+        if not ELEVENLABS_API_KEY:
+            print("Error: ELEVENLABS_API_KEY no configurada")
+            return False
+            
+        # Generar audio con ElevenLabs
+        audio = generate(
+            text=text,
+            voice=ELEVENLABS_VOICE_ID,
+            model="eleven_multilingual_v2"
+        )
+        
+        # Guardar directamente como WAV
+        save(audio, wavfile)
         return True
     except Exception as e:
-        print(f"Error generando audio con Coqui TTS: {e}")
+        print(f"Error generando audio con ElevenLabs: {e}")
         return False
 
 def chatfun(request, text_queue, llm_finished):
@@ -85,11 +88,11 @@ def chatfun(request, text_queue, llm_finished):
         
     messages.append({'role': 'assistant', 'content': reply})
     append2log(f"{reply}") 
-    llm_finished.set()  # Signal completion of the text generation by LLM
+    llm_finished.set()
 
 def speak_text(text):
     wavfile = "temp_speak.wav"
-    if generate_speech_coqui(text, wavfile):
+    if generate_speech_elevenlabs(text, wavfile):
         try:
             mixer.music.load(wavfile)
             mixer.music.play()
@@ -110,7 +113,7 @@ def text2speech(text_queue, textdone,llm_finished, audio_queue, stop_event):
             text = text_queue.get(timeout = 0.5)
             numtts += 1 
             wavfile = f"temp_tts_{numtts}.wav"
-            if generate_speech_coqui(text, wavfile):
+            if generate_speech_elevenlabs(text, wavfile):
                 audio_queue.put(wavfile)
             text_queue.task_done()
         if llm_finished.is_set() and numtts == numtext: 

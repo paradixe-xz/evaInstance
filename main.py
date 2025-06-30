@@ -9,13 +9,11 @@ from twilio.twiml.voice_response import VoiceResponse
 import ollama  # Para usar el modelo de chat
 import requests
 import speech_recognition as sr
-from gtts import gTTS
 from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
-import pyttsx3
 import wave
-from TTS.api import TTS
+from elevenlabs import generate, save, set_api_key, voices
 
 app = FastAPI()
 
@@ -25,6 +23,14 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER')
 TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
+
+# ElevenLabs config
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  # Rachel voice
+
+if ELEVENLABS_API_KEY:
+    set_api_key(ELEVENLABS_API_KEY)
+
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # Crea el directorio de audios si no existe
@@ -35,36 +41,40 @@ app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 # Obtén la URL base pública desde el entorno
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
-# Configuración de TTS mejorado
-TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')  # 'gtts_improved' o 'pyttsx3'
-
-tts_model = None
-
-def get_tts_model():
-    global tts_model
-    if tts_model is None:
-        tts_model = TTS(model_name="tts_models/es/css10/vits")
-    return tts_model
-
-def generate_speech_coqui(text, output_file):
-    """Genera audio usando Coqui TTS y lo convierte a WAV 8kHz mono para Twilio"""
+def generate_speech_elevenlabs(text, output_file):
+    """Genera audio usando ElevenLabs y lo convierte a WAV 8kHz mono para Twilio"""
     try:
-        temp_wav = output_file + ".tmp.wav"
-        tts = get_tts_model()
-        tts.tts_to_file(text=text, file_path=temp_wav)
-        # Convertir a WAV 8kHz mono
-        audio = AudioSegment.from_file(temp_wav)
-        audio = audio.set_frame_rate(8000).set_channels(1)
-        audio.export(output_file, format="wav")
-        os.remove(temp_wav)
+        if not ELEVENLABS_API_KEY:
+            print("Error: ELEVENLABS_API_KEY no configurada")
+            return False
+            
+        # Generar audio con ElevenLabs
+        audio = generate(
+            text=text,
+            voice=ELEVENLABS_VOICE_ID,
+            model="eleven_multilingual_v2"
+        )
+        
+        # Guardar temporalmente
+        temp_file = output_file + ".temp.wav"
+        save(audio, temp_file)
+        
+        # Convertir a WAV 8kHz mono para Twilio
+        audio_segment = AudioSegment.from_file(temp_file)
+        audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
+        audio_segment.export(output_file, format="wav")
+        
+        # Limpiar archivo temporal
+        os.remove(temp_file)
+        
         if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
-            print(f"Audio generado y convertido a WAV 8kHz mono: {output_file}")
+            print(f"Audio generado con ElevenLabs: {output_file}")
             return True
         else:
             print("Archivo de audio no se creó correctamente")
             return False
     except Exception as e:
-        print(f"Error generando audio con Coqui TTS: {e}")
+        print(f"Error generando audio con ElevenLabs: {e}")
         return False
 
 @app.get("/")
@@ -74,26 +84,25 @@ def read_root():
 @app.get("/test-tts")
 def test_tts():
     """Endpoint para probar el TTS"""
-    test_text = "Hola, esto es una prueba del sistema de voz."
+    test_text = "Hola, esto es una prueba del sistema de voz con ElevenLabs."
     audio_filename = f"audio/test_{uuid.uuid4()}.wav"
     
-    print(f"Probando TTS con texto: {test_text}")
-    print(f"Método configurado: {TTS_METHOD}")
+    print(f"Probando ElevenLabs TTS con texto: {test_text}")
     
-    if generate_speech_coqui(test_text, audio_filename):
+    if generate_speech_elevenlabs(test_text, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
         return {
             "success": True,
-            "message": "TTS funcionando correctamente",
+            "message": "ElevenLabs TTS funcionando correctamente",
             "audio_url": audio_url,
-            "method": TTS_METHOD,
+            "voice_id": ELEVENLABS_VOICE_ID,
             "text": test_text
         }
     else:
         return {
             "success": False,
-            "message": "Error en TTS",
-            "method": TTS_METHOD,
+            "message": "Error en ElevenLabs TTS",
+            "voice_id": ELEVENLABS_VOICE_ID,
             "text": test_text
         }
 
@@ -201,11 +210,11 @@ async def handle_speech(request: Request):
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
     append_to_history(user_number, 'assistant', ai_reply)
     
-    # Usar TTS mejorado y formato compatible
+    # Usar ElevenLabs TTS
     audio_filename = f"audio/response_{uuid.uuid4()}.wav"
     response = VoiceResponse()
     print(f"Generando audio para: {ai_reply[:50]}...")
-    if generate_speech_coqui(ai_reply, audio_filename):
+    if generate_speech_elevenlabs(ai_reply, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
         print(f"Audio generado exitosamente: {audio_url}")
         response.play(audio_url)
