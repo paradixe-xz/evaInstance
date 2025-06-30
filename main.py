@@ -177,7 +177,20 @@ def send_numbers(req: PhoneNumbersRequest):
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
     response = VoiceResponse()
-    response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.", language="es-ES")
+    
+    # Generar saludo personalizado con ElevenLabs
+    greeting_text = "¡Hola! Soy Ana, tu asistente virtual. Estoy aquí para ayudarte. Por favor, di algo después del beep y espera mi respuesta."
+    greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
+    
+    print("Generando saludo personalizado con ElevenLabs...")
+    if generate_speech_elevenlabs(greeting_text, greeting_filename):
+        greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
+        print(f"Saludo generado exitosamente: {greeting_url}")
+        response.play(greeting_url)
+    else:
+        print("Error generando saludo, usando fallback")
+        response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.", language="es-ES")
+    
     response.gather(
         input="speech",
         language="es-ES",
@@ -186,7 +199,15 @@ async def twilio_voice(request: Request):
         timeout=7,
         speechTimeout="auto"
     )
-    response.say("No se detectó audio. Adiós.", language="es-ES")
+    # Generar despedida personalizada con ElevenLabs
+    goodbye_text = "No se detectó audio. Ha sido un placer hablar contigo. ¡Que tengas un excelente día!"
+    goodbye_filename = f"audio/goodbye_{uuid.uuid4()}.wav"
+    
+    if generate_speech_elevenlabs(goodbye_text, goodbye_filename):
+        goodbye_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(goodbye_filename)}"
+        response.play(goodbye_url)
+    else:
+        response.say("No se detectó audio. Adiós.", language="es-ES")
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
 
@@ -234,7 +255,15 @@ async def handle_speech(request: Request):
         timeout=10,
         speechTimeout="auto"
     )
-    response.say("No se detectó audio. Adiós.", language="es-ES")
+    # Generar despedida personalizada con ElevenLabs
+    goodbye_text = "No se detectó audio. Ha sido un placer hablar contigo. ¡Que tengas un excelente día!"
+    goodbye_filename = f"audio/goodbye_{uuid.uuid4()}.wav"
+    
+    if generate_speech_elevenlabs(goodbye_text, goodbye_filename):
+        goodbye_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(goodbye_filename)}"
+        response.play(goodbye_url)
+    else:
+        response.say("No se detectó audio. Adiós.", language="es-ES")
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
 
