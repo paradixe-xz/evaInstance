@@ -12,6 +12,7 @@ import speech_recognition as sr
 from gtts import gTTS
 from pydub import AudioSegment
 import uuid
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -22,6 +23,14 @@ TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER')
 TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+# Crea el directorio de audios si no existe
+audio_dir = "audio"
+os.makedirs(audio_dir, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
+
+# Obtén la URL base pública desde el entorno
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
 @app.get("/")
 def read_root():
@@ -114,14 +123,12 @@ async def handle_speech(request: Request):
     from_number = form.get('From', '')
     print(f"SpeechResult: {speech_result}")
     print(f"From: {from_number}")
-    # Historial por llamada (puedes mejorar esto usando un ID de sesión)
     user_number = from_number.replace('whatsapp:', '').strip()
     if not user_number.startswith('+'):
         user_number = '+' + user_number
     history = load_history(user_number)
     append_to_history(user_number, 'user', speech_result)
     history.append({'role': 'user', 'content': speech_result})
-    # Llama al modelo IA
     try:
         response_ia = ollama.chat(
             model='isa',
@@ -132,20 +139,18 @@ async def handle_speech(request: Request):
         print("Error llamando a ollama:", e)
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
     append_to_history(user_number, 'assistant', ai_reply)
-    # Convierte la respuesta a voz
     tts = gTTS(ai_reply, lang="es")
-    audio_filename = f"response_{uuid.uuid4()}.mp3"
+    audio_filename = f"audio/response_{uuid.uuid4()}.mp3"
     tts.save(audio_filename)
-    # Twilio requiere WAV o PCM, convierte el mp3 a wav
     wav_filename = audio_filename.replace('.mp3', '.wav')
     sound = AudioSegment.from_mp3(audio_filename)
     sound.export(wav_filename, format="wav")
-    # Prepara la respuesta TwiML
+    audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(wav_filename)}"
     response = VoiceResponse()
-    response.play(wav_filename)
-    # Vuelve a escuchar al usuario
+    response.play(audio_url)
     response.gather(
         input="speech",
+        language="es-ES",
         action="/twilio/voice/handle_speech",
         method="POST",
         timeout=5,
@@ -163,7 +168,6 @@ def load_history(number):
         return []
     with open(path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    # Formato: alterna 'user:' y 'assistant:'
     history = []
     for line in lines:
         if line.startswith('user:'):
@@ -187,7 +191,6 @@ async def whatsapp_webhook(request: Request):
         from_number = form.get('From', '')
         body = form.get('Body', '').strip()
         print("From:", from_number, "Body:", body)
-        # El número viene como 'whatsapp:+1234567890', extraer solo el número y asegurar que tenga '+'
         if from_number.startswith('whatsapp:'):
             user_number = from_number.replace('whatsapp:', '').strip()
         else:
@@ -195,25 +198,20 @@ async def whatsapp_webhook(request: Request):
         if not user_number.startswith('+'):
             user_number = '+' + user_number
         print("User number:", user_number)
-        # Cargar historial
         history = load_history(user_number)
         print("Historial cargado:", history)
-        # Agregar mensaje del usuario
         append_to_history(user_number, 'user', body)
         history.append({'role': 'user', 'content': body})
-        # Llamar al modelo (ollama)
         try:
             response = ollama.chat(
-                model='isa',  # O el modelo que prefieras
+                model='isa',
                 messages=history
             )
             ai_reply = response['message']['content']
         except Exception as e:
             print("Error llamando a ollama:", e)
             ai_reply = "Lo siento, hubo un error procesando tu mensaje."
-        # Guardar respuesta de la IA
         append_to_history(user_number, 'assistant', ai_reply)
-        # Responder por WhatsApp
         client.messages.create(
             body=ai_reply,
             from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
