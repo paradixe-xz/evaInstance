@@ -7,6 +7,11 @@ from twilio.rest import Client
 from fastapi.responses import Response, PlainTextResponse
 from twilio.twiml.voice_response import VoiceResponse
 import ollama  # Para usar el modelo de chat
+import requests
+import speech_recognition as sr
+from gtts import gTTS
+from pydub import AudioSegment
+import uuid
 
 app = FastAPI()
 
@@ -88,15 +93,63 @@ def send_numbers(req: PhoneNumbersRequest):
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
-    # This endpoint is called by Twilio when the call is answered
-    # Here, you would connect the call to the AI assistant logic
-    # For now, just greet and say "Connecting you to the AI assistant"
     response = VoiceResponse()
-    response.say("Connecting you to the AI assistant.")
-    # TODO: Stream call audio to/from AI assistant (see app.py for logic)
-    # This is a placeholder; actual media streaming requires Twilio Media Streams and websocket handling
-    response.say("Sorry, the AI assistant is not available yet.")
+    response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.")
+    response.gather(
+        input="speech",
+        action="/twilio/voice/handle_speech",
+        method="POST",
+        timeout=5,
+        speechTimeout="auto"
+    )
+    response.say("No se detectó audio. Adiós.")
     response.hangup()
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+@app.post("/twilio/voice/handle_speech")
+async def handle_speech(request: Request):
+    form = await request.form()
+    speech_result = form.get('SpeechResult', '').strip()
+    from_number = form.get('From', '')
+    print(f"SpeechResult: {speech_result}")
+    print(f"From: {from_number}")
+    # Historial por llamada (puedes mejorar esto usando un ID de sesión)
+    user_number = from_number.replace('whatsapp:', '').strip()
+    if not user_number.startswith('+'):
+        user_number = '+' + user_number
+    history = load_history(user_number)
+    append_to_history(user_number, 'user', speech_result)
+    history.append({'role': 'user', 'content': speech_result})
+    # Llama al modelo IA
+    try:
+        response_ia = ollama.chat(
+            model='isa',
+            messages=history
+        )
+        ai_reply = response_ia['message']['content']
+    except Exception as e:
+        print("Error llamando a ollama:", e)
+        ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+    append_to_history(user_number, 'assistant', ai_reply)
+    # Convierte la respuesta a voz
+    tts = gTTS(ai_reply, lang="es")
+    audio_filename = f"response_{uuid.uuid4()}.mp3"
+    tts.save(audio_filename)
+    # Twilio requiere WAV o PCM, convierte el mp3 a wav
+    wav_filename = audio_filename.replace('.mp3', '.wav')
+    sound = AudioSegment.from_mp3(audio_filename)
+    sound.export(wav_filename, format="wav")
+    # Prepara la respuesta TwiML
+    response = VoiceResponse()
+    response.play(wav_filename)
+    # Vuelve a escuchar al usuario
+    response.gather(
+        input="speech",
+        action="/twilio/voice/handle_speech",
+        method="POST",
+        timeout=5,
+        speechTimeout="auto"
+    )
     return PlainTextResponse(str(response), media_type="application/xml")
 
 # --- Historial de chat por usuario (archivo) ---
