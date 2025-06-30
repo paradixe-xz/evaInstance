@@ -184,52 +184,48 @@ def create_whatsapp_form_message(stage: str, name: str = "") -> str:
     """Crea mensajes estructurados con formularios para WhatsApp"""
     
     if stage == "initial":
-        return f"""¡Hola {name}! 👋 Soy Ana, tu asesora de préstamos.
+        return f"""📢 ¡Hola {name}! Soy ANA de AVANZA, especialistas en préstamos por libranza para el magisterio y jubilados 💼
 
-Te contacté porque fuiste pre-seleccionado para un préstamo especial de hasta $150 millones con tasas desde 1.6% mensual.
+¡Aquí sí prestamos aunque estés reportado en centrales! Tenemos tasas desde solo 1,6% mensual y montos hasta $150 millones 💰
 
-🎯 Beneficios exclusivos:
-• Desembolso en 24-48 horas
-• Solo necesitas cédula vigente
-• Sin embargos
-• Plazos flexibles
+Esta puede ser tu oportunidad para liberarte de deudas o recibir dinero extra sin enredos.
 
-¿Te gustaría que te llame para explicarte todos los detalles? 
+¿Te puedo llamar ya mismo para explicártelo en 2 minuticos? Di que sí y empezamos a mejorar tu salud financiera hoy mismo 🟢💪
 
 Responde con:
-✅ "Sí, llámame" - Para que te llame ahora
-⏰ "Llámame a las [hora]" - Para programar una llamada
+✅ "Sí, llámame" - Te llamo ahora mismo
+⏰ "Llámame a las [hora]" - Te llamo cuando quieras
 ❌ "No, gracias" - Para cerrar la conversación
 
 ¿Qué prefieres?"""
 
     elif stage == "waiting_confirmation":
-        return f"""¡Perfecto {name}! 
+        return f"""🎯 ¡Perfecto {name}! 
 
-Para programar tu llamada y explicarte todos los detalles del préstamo, dime a qué hora te gustaría que te llame.
+Para agendar tu llamada y revisar tu elegibilidad para el préstamo, dime cuándo te parece mejor:
 
-Ejemplos:
-• "Llámame a las 3:30 PM"
-• "Mañana a las 10:00"
-• "En 2 horas"
-• "Ahora mismo"
+⏰ Opciones:
+• "Ahora mismo" - Te llamo en 5 minutos
+• "En 2 horas" - Te llamo en 2 horas  
+• "A las 3:30 PM" - Te llamo a esa hora
+• "Mañana a las 10:00" - Te llamo mañana
 
-¿A qué hora prefieres que te llame para revisar tu elegibilidad?"""
+¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
 
     elif stage == "scheduled_call":
-        return f"""¡Excelente {name}! 
+        return f"""✅ ¡Excelente {name}! 
 
-Tu llamada está programada. Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo.
+Tu llamada está programada. Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo AVANZA.
 
 📋 En la llamada revisaremos:
-• Tu situación actual
-• Monto que puedes obtener
-• Documentación necesaria
-• Proceso de desembolso
+• Tu situación actual y capacidad de pago
+• Monto que puedes obtener (hasta $150 millones)
+• Documentación necesaria (solo cédula vigente)
+• Proceso de desembolso (24-48 horas)
 
 Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
 
-¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+¡Prepárate para mejorar tu salud financiera! 💰💪"""
 
     return "Gracias por tu tiempo. ¡Que tengas un excelente día!"
 
@@ -500,7 +496,11 @@ async def twilio_voice(request: Request):
     response = VoiceResponse()
     
     # Generar saludo personalizado con ElevenLabs
-    greeting_text = "¡Hola! Soy Ana, tu asistente virtual. Estoy aquí para ayudarte. Por favor, di algo después del beep y espera mi respuesta."
+    greeting_text = (
+        "Hola, soy Ana de AVANZA. Vi que te interesaste en nuestro préstamo especial para el magisterio y jubilados. "
+        "Me gustaría saber un poco más sobre tu situación para ayudarte mejor. "
+        "¿Podrías contarme para qué te gustaría usar el préstamo o si tienes alguna deuda que te gustaría consolidar?"
+    )
     greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
     
     print("Generando saludo personalizado con ElevenLabs...")
@@ -510,7 +510,12 @@ async def twilio_voice(request: Request):
         response.play(greeting_url)
     else:
         print("Error generando saludo, usando fallback")
-        response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.", language="es-ES")
+        response.say(
+            "Hola, soy Ana de AVANZA. Vi que te interesaste en nuestro préstamo especial para el magisterio y jubilados. "
+            "Me gustaría saber un poco más sobre tu situación para ayudarte mejor. "
+            "¿Podrías contarme para qué te gustaría usar el préstamo o si tienes alguna deuda que te gustaría consolidar?",
+            language="es-ES"
+        )
     
     response.gather(
         input="speech",
@@ -646,17 +651,17 @@ async def whatsapp_webhook(request: Request):
             if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo"]):
                 # Usuario quiere que lo llame ahora
                 state["stage"] = "waiting_confirmation"
-                ai_reply = f"""¡Perfecto {state['name']}! 
+                ai_reply = f"""🎯 ¡Perfecto {state['name']}! 
 
-Para programar tu llamada y explicarte todos los detalles del préstamo, dime a qué hora te gustaría que te llame.
+Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime cuándo te parece mejor:
 
-Ejemplos:
+⏰ Opciones:
 • "Ahora mismo" - Te llamo en 5 minutos
-• "En 2 horas" - Te llamo en 2 horas
+• "En 2 horas" - Te llamo en 2 horas  
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
 
-¿Cuándo prefieres que te llame para revisar tu elegibilidad?"""
+¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
                 
             elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar"]):
                 # Usuario no quiere llamada
@@ -707,36 +712,38 @@ Para ayudarte mejor, necesito que me digas específicamente:
                 
                 # Si es "ahora mismo", dar respuesta inmediata
                 if any(word in user_response.lower() for word in ["ahora", "ya", "inmediatamente", "ahorita", "ahora mismo"]):
-                    ai_reply = f"""¡Perfecto {state['name']}! 
+                    ai_reply = f"""🚀 ¡Perfecto {state['name']}! 
 
-Te llamaré en 5 minutos para explicarte todos los detalles del préstamo.
+Te llamaré en 5 minutos para explicarte todos los detalles del préstamo AVANZA.
 
 📋 En la llamada revisaremos:
-• Tu situación actual
-• Monto que puedes obtener
-• Documentación necesaria
-• Proceso de desembolso
+• Tu situación actual y capacidad de pago
+• Monto que puedes obtener (hasta $150 millones)
+• Documentación necesaria (solo cédula vigente)
+• Proceso de desembolso (24-48 horas)
 
-¡Prepárate para la llamada! 📞"""
+¡Prepárate para mejorar tu salud financiera! 💰💪📞"""
                 else:
-                    ai_reply = f"""¡Excelente {state['name']}! 
+                    ai_reply = f"""✅ ¡Excelente {state['name']}! 
 
 Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
 
-Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
+Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo AVANZA.
 
-¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
+
+¡Prepárate para mejorar tu salud financiera! 💰💪"""
             else:
                 # Si no reconoce el tiempo, dar opciones más claras
-                ai_reply = f"""Entiendo {state['name']}. 
+                ai_reply = f"""💡 Entiendo {state['name']}. 
 
-Para programar tu llamada, dime específicamente:
+Para agendar tu llamada y revisar tu elegibilidad, dime específicamente:
 • "Ahora mismo" - Te llamo en 5 minutos
 • "En 2 horas" - Te llamo en 2 horas
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
 
-¿Cuándo prefieres que te llame?"""
+¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
         
         elif state["stage"] == "scheduled_call":
             # Llamada ya programada - verificar si quiere cambiar hora
