@@ -1,0 +1,7 @@
+fastapi
+pydantic
+twilio
+speechrecognition
+gtts
+pygame
+ollama 

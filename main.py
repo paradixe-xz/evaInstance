@@ -1,10 +1,20 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import List
 import os
 import subprocess
+from twilio.rest import Client
+from fastapi.responses import Response, PlainTextResponse
+from twilio.twiml.voice_response import VoiceResponse
 
 app = FastAPI()
+
+# Twilio config (solo variables de entorno, sin valores hardcodeados)
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
+client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 @app.get("/")
 def read_root():
@@ -49,10 +59,30 @@ class PhoneNumbersRequest(BaseModel):
 
 @app.post("/sendNumbers")
 def send_numbers(req: PhoneNumbersRequest):
-    # Aquí puedes hacer lo que quieras con la lista de números
     print("Números recibidos:", req.numbers)
     try:
-        # Aquí podrías llamar a otro servicio, guardar en base de datos, etc.
-        return {"message": "Números recibidos correctamente", "count": len(req.numbers)}
+        # Initiate a call to each number using Twilio
+        call_results = []
+        for number in req.numbers:
+            call = client.calls.create(
+                to=number,
+                from_=TWILIO_PHONE_NUMBER,
+                url=TWILIO_WEBHOOK_URL  # Twilio will request this URL when the call is answered
+            )
+            call_results.append({"to": number, "sid": call.sid})
+        return {"message": "Números recibidos correctamente, llamadas iniciadas", "results": call_results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando los números: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando los números o iniciando llamadas: {e}")
+
+@app.post("/twilio/voice")
+async def twilio_voice(request: Request):
+    # This endpoint is called by Twilio when the call is answered
+    # Here, you would connect the call to the AI assistant logic
+    # For now, just greet and say "Connecting you to the AI assistant"
+    response = VoiceResponse()
+    response.say("Connecting you to the AI assistant.")
+    # TODO: Stream call audio to/from AI assistant (see app.py for logic)
+    # This is a placeholder; actual media streaming requires Twilio Media Streams and websocket handling
+    response.say("Sorry, the AI assistant is not available yet.")
+    response.hangup()
+    return PlainTextResponse(str(response), media_type="application/xml")
