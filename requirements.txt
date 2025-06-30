@@ -7,3 +7,5 @@ ollama
 python-multipart
 pydub
 elevenlabs
+pandas
+openpyxl

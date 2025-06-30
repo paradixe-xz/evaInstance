@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
 from pydantic import BaseModel
 from typing import List
 import os
@@ -14,6 +14,8 @@ import uuid
 from fastapi.staticfiles import StaticFiles
 import wave
 from elevenlabs import ElevenLabs
+import pandas as pd
+import io
 
 app = FastAPI()
 
@@ -143,36 +145,120 @@ def create_representative(req: CreateRepresentativeRequest):
 
     return {"message": f"Representative '{req.model_name}' created successfully.", "output": result.stdout}
 
-# --- Nuevo endpoint para recibir números de teléfono ---
-class PhoneNumbersRequest(BaseModel):
-    numbers: List[str]
-
+# --- Nuevo endpoint para recibir archivo Excel con nombres y números ---
 @app.post("/sendNumbers")
-def send_numbers(req: PhoneNumbersRequest):
-    print("Números recibidos:", req.numbers)
+async def send_numbers(file: UploadFile = File(...)):
+    print(f"Archivo recibido: {file.filename}")
+    
+    # Validar que sea un archivo Excel
+    if not file.filename.lower().endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos Excel (.xlsx, .xls)")
+    
     try:
+        # Leer el contenido del archivo
+        content = await file.read()
+        
+        # Procesar el archivo Excel
+        try:
+            df = pd.read_excel(io.BytesIO(content))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error leyendo el archivo Excel: {str(e)}")
+        
+        # Validar que tenga las columnas necesarias
+        required_columns = ['nombre', 'numero']
+        missing_columns = [col for col in required_columns if col.lower() not in [col.lower() for col in df.columns]]
+        
+        if missing_columns:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"El archivo debe contener las columnas: {', '.join(required_columns)}. Columnas faltantes: {', '.join(missing_columns)}"
+            )
+        
+        # Normalizar nombres de columnas
+        df.columns = df.columns.str.lower()
+        
+        # Limpiar datos
+        df = df.dropna(subset=['numero'])  # Eliminar filas sin número
+        df['numero'] = df['numero'].astype(str).str.strip()
+        
+        # Validar números de teléfono
+        valid_numbers = []
+        invalid_numbers = []
+        
+        for index, row in df.iterrows():
+            number = row['numero']
+            name = row.get('nombre', 'Sin nombre')
+            
+            # Limpiar número (remover espacios, guiones, etc.)
+            clean_number = ''.join(filter(str.isdigit, number))
+            
+            # Validar formato básico
+            if len(clean_number) >= 10:
+                # Agregar + si no tiene
+                if not clean_number.startswith('+'):
+                    clean_number = '+' + clean_number
+                valid_numbers.append({
+                    'name': name,
+                    'number': clean_number,
+                    'original_number': number
+                })
+            else:
+                invalid_numbers.append({
+                    'name': name,
+                    'number': number,
+                    'row': index + 2  # +2 porque Excel empieza en 1 y tenemos header
+                })
+        
+        if not valid_numbers:
+            raise HTTPException(status_code=400, detail="No se encontraron números de teléfono válidos en el archivo")
+        
+        # Procesar números válidos
         results = []
-        for number in req.numbers:
-            # Enviar mensaje de WhatsApp
-            whatsapp_message = client.messages.create(
-                body="Hola",
-                from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
-                to="whatsapp:" + number
-            )
-            # Iniciar llamada
-            call = client.calls.create(
-                to=number,
-                from_=TWILIO_PHONE_NUMBER,
-                url=TWILIO_WEBHOOK_URL
-            )
-            results.append({
-                "to": number,
-                "whatsapp_sid": whatsapp_message.sid,
-                "call_sid": call.sid
-            })
-        return {"message": "Mensajes y llamadas iniciados correctamente", "results": results}
+        for contact in valid_numbers:
+            try:
+                # Enviar mensaje de WhatsApp
+                whatsapp_message = client.messages.create(
+                    body=f"Hola {contact['name']}, soy Ana tu asistente virtual. Te llamaré en unos momentos.",
+                    from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+                    to="whatsapp:" + contact['number']
+                )
+                
+                # Iniciar llamada
+                call = client.calls.create(
+                    to=contact['number'],
+                    from_=TWILIO_PHONE_NUMBER,
+                    url=TWILIO_WEBHOOK_URL
+                )
+                
+                results.append({
+                    "name": contact['name'],
+                    "to": contact['number'],
+                    "whatsapp_sid": whatsapp_message.sid,
+                    "call_sid": call.sid,
+                    "status": "success"
+                })
+                
+            except Exception as e:
+                results.append({
+                    "name": contact['name'],
+                    "to": contact['number'],
+                    "error": str(e),
+                    "status": "error"
+                })
+        
+        return {
+            "message": f"Procesamiento completado. {len(valid_numbers)} contactos válidos encontrados.",
+            "total_contacts": len(df),
+            "valid_contacts": len(valid_numbers),
+            "invalid_contacts": len(invalid_numbers),
+            "results": results,
+            "invalid_numbers": invalid_numbers
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando los números: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando el archivo: {str(e)}")
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
