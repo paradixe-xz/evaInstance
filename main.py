@@ -15,6 +15,7 @@ import uuid
 from fastapi.staticfiles import StaticFiles
 import pyttsx3
 import wave
+from TTS.api import TTS
 
 app = FastAPI()
 
@@ -37,42 +38,20 @@ PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 # Configuración de TTS mejorado
 TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')  # 'gtts_improved' o 'pyttsx3'
 
-def setup_tts_engine():
-    """Configura el motor de TTS offline si está disponible"""
-    try:
-        engine = pyttsx3.init()
-        # Buscar voz en español
-        voices = engine.getProperty('voices')
-        spanish_voice = None
-        for voice in voices:
-            if 'spanish' in voice.name.lower() or 'español' in voice.name.lower():
-                spanish_voice = voice.id
-                break
-        if spanish_voice:
-            engine.setProperty('voice', spanish_voice)
-        # Configurar velocidad y volumen
-        engine.setProperty('rate', 150)
-        engine.setProperty('volume', 0.9)
-        return engine
-    except Exception as e:
-        print(f"Error configurando TTS offline: {e}")
-        return None
+tts_model = None
 
-def generate_speech_improved(text, output_file):
-    """Genera audio usando el método configurado y lo convierte a WAV 8kHz mono para Twilio"""
+def get_tts_model():
+    global tts_model
+    if tts_model is None:
+        tts_model = TTS(model_name="tts_models/es/css10/vits")
+    return tts_model
+
+def generate_speech_coqui(text, output_file):
+    """Genera audio usando Coqui TTS y lo convierte a WAV 8kHz mono para Twilio"""
     try:
         temp_wav = output_file + ".tmp.wav"
-        if TTS_METHOD == "pyttsx3":
-            engine = setup_tts_engine()
-            if engine:
-                engine.save_to_file(text, temp_wav)
-                engine.runAndWait()
-            else:
-                tts = gTTS(text, lang="es", slow=False)
-                tts.save(temp_wav)
-        else:
-            tts = gTTS(text, lang="es", slow=False, lang_check=True)
-            tts.save(temp_wav)
+        tts = get_tts_model()
+        tts.tts_to_file(text=text, file_path=temp_wav)
         # Convertir a WAV 8kHz mono
         audio = AudioSegment.from_file(temp_wav)
         audio = audio.set_frame_rate(8000).set_channels(1)
@@ -85,7 +64,7 @@ def generate_speech_improved(text, output_file):
             print("Archivo de audio no se creó correctamente")
             return False
     except Exception as e:
-        print(f"Error generando audio: {e}")
+        print(f"Error generando audio con Coqui TTS: {e}")
         return False
 
 @app.get("/")
@@ -101,7 +80,7 @@ def test_tts():
     print(f"Probando TTS con texto: {test_text}")
     print(f"Método configurado: {TTS_METHOD}")
     
-    if generate_speech_improved(test_text, audio_filename):
+    if generate_speech_coqui(test_text, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
         return {
             "success": True,
@@ -226,7 +205,7 @@ async def handle_speech(request: Request):
     audio_filename = f"audio/response_{uuid.uuid4()}.wav"
     response = VoiceResponse()
     print(f"Generando audio para: {ai_reply[:50]}...")
-    if generate_speech_improved(ai_reply, audio_filename):
+    if generate_speech_coqui(ai_reply, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
         print(f"Audio generado exitosamente: {audio_url}")
         response.play(audio_url)

@@ -4,13 +4,13 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"  # <-- Esto es lo importante
 from ollama import chat
 import speech_recognition as sr
 from datetime import date
-from gtts import gTTS
 from io import BytesIO
 from pygame import mixer 
 import threading
 import queue
 import time
-import pyttsx3
+from pydub import AudioSegment
+from TTS.api import TTS
 
 mixer.init()
 
@@ -27,59 +27,27 @@ messages = []
 # Configuración de TTS mejorado
 TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')
 
-def setup_tts_engine():
-    """Configura el motor de TTS offline"""
-    try:
-        engine = pyttsx3.init()
-        voices = engine.getProperty('voices')
-        spanish_voice = None
-        for voice in voices:
-            if 'spanish' in voice.name.lower() or 'español' in voice.name.lower():
-                spanish_voice = voice.id
-                break
-        if spanish_voice:
-            engine.setProperty('voice', spanish_voice)
-        engine.setProperty('rate', 150)
-        engine.setProperty('volume', 0.9)
-        return engine
-    except Exception as e:
-        print(f"Error configurando TTS offline: {e}")
-        return None
+tts_model = None
+def get_tts_model():
+    global tts_model
+    if tts_model is None:
+        tts_model = TTS(model_name="tts_models/es/css10/vits")
+    return tts_model
 
-def generate_speech_improved(text, mp3file):
-    """Genera audio usando el método configurado"""
+def generate_speech_coqui(text, wavfile):
+    """Genera audio usando Coqui TTS y lo convierte a WAV 8kHz mono"""
     try:
-        if TTS_METHOD == "pyttsx3":
-            engine = setup_tts_engine()
-            if engine:
-                # pyttsx3 genera directamente en formato wav, necesitamos convertir
-                temp_wav = BytesIO()
-                engine.save_to_file(text, temp_wav)
-                engine.runAndWait()
-                # Convertir wav a mp3 usando pydub
-                from pydub import AudioSegment
-                audio = AudioSegment.from_wav(temp_wav)
-                audio.export(mp3file, format="mp3")
-                return True
-            else:
-                # Fallback a gTTS
-                tts = gTTS(text, lang="en", tld='us')
-                tts.write_to_fp(mp3file)
-                return True
-        else:
-            # Usar gTTS mejorado
-            tts = gTTS(text, lang="en", tld='us', slow=False)
-            tts.write_to_fp(mp3file)
-            return True
+        temp_wav = "temp_coqui.wav"
+        tts = get_tts_model()
+        tts.tts_to_file(text=text, file_path=temp_wav)
+        audio = AudioSegment.from_file(temp_wav)
+        audio = audio.set_frame_rate(8000).set_channels(1)
+        audio.export(wavfile, format="wav")
+        os.remove(temp_wav)
+        return True
     except Exception as e:
-        print(f"Error generando audio: {e}")
-        # Fallback final
-        try:
-            tts = gTTS(text, lang="en", tld='us')
-            tts.write_to_fp(mp3file)
-            return True
-        except:
-            return False 
+        print(f"Error generando audio con Coqui TTS: {e}")
+        return False
 
 def chatfun(request, text_queue, llm_finished):
     global numtext, messages
@@ -120,49 +88,52 @@ def chatfun(request, text_queue, llm_finished):
     llm_finished.set()  # Signal completion of the text generation by LLM
 
 def speak_text(text):
-    mp3file = BytesIO()
-    if generate_speech_improved(text, mp3file):
-        mp3file.seek(0)
+    wavfile = "temp_speak.wav"
+    if generate_speech_coqui(text, wavfile):
         try:
-            mixer.music.load(mp3file, "mp3")
+            mixer.music.load(wavfile)
             mixer.music.play()
             while mixer.music.get_busy(): 
                 time.sleep(0.1)
+            os.remove(wavfile)
         except KeyboardInterrupt:
             mixer.music.stop()
-            mp3file.close()
-        mp3file.close()
+            if os.path.exists(wavfile):
+                os.remove(wavfile)
     else:
-        print("Error generando audio para reproducción")	
+        print("Error generando audio para reproducción")
 
 def text2speech(text_queue, textdone,llm_finished, audio_queue, stop_event):
     global numtext, numtts
-    while not stop_event.is_set():  # Keep running until stop_event is set
+    while not stop_event.is_set():
         if not text_queue.empty():
-            text = text_queue.get(timeout = 0.5)  # Wait for 2 second for an item
+            text = text_queue.get(timeout = 0.5)
             numtts += 1 
-            mp3file = BytesIO()
-            if generate_speech_improved(text, mp3file):
-                audio_queue.put(mp3file)
+            wavfile = f"temp_tts_{numtts}.wav"
+            if generate_speech_coqui(text, wavfile):
+                audio_queue.put(wavfile)
             text_queue.task_done()
         if llm_finished.is_set() and numtts == numtext: 
             time.sleep(0.2)
             textdone.set()
-            break 
-        
+            break
+
 def play_audio(audio_queue,textdone, stop_event):
     global numtts, numaudio 
-    while not stop_event.is_set():  # Keep running until stop_event is set
-        mp3audio = audio_queue.get()  # Get BytesIO object (non-blocking)
+    while not stop_event.is_set():
+        wavfile = audio_queue.get()
         numaudio += 1 
-        mp3audio.seek(0)
-        mixer.music.load(mp3audio, "mp3")
-        mixer.music.play()
-        while mixer.music.get_busy(): 
-            time.sleep(0.1)
+        try:
+            mixer.music.load(wavfile)
+            mixer.music.play()
+            while mixer.music.get_busy(): 
+                time.sleep(0.1)
+            os.remove(wavfile)
+        except Exception as e:
+            print(f"Error reproduciendo audio: {e}")
         audio_queue.task_done() 
         if textdone.is_set() and numtts == numaudio: 
-            break  # Exit loop if queue is empty and processing is finished         
+            break
 
 def append2log(text):
     global today

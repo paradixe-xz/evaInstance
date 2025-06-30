@@ -2,9 +2,8 @@ fastapi
 pydantic
 twilio
 speechrecognition
-gtts
 pygame
 ollama 
 python-multipart
 pydub
-pyttsx3
+TTS
