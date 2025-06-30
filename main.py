@@ -94,15 +94,16 @@ def send_numbers(req: PhoneNumbersRequest):
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
     response = VoiceResponse()
-    response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.")
+    response.say("Hola, estás hablando con la IA. Por favor, di algo después del beep y espera la respuesta.", language="es-ES")
     response.gather(
         input="speech",
+        language="es-ES",
         action="/twilio/voice/handle_speech",
         method="POST",
-        timeout=5,
+        timeout=7,
         speechTimeout="auto"
     )
-    response.say("No se detectó audio. Adiós.")
+    response.say("No se detectó audio. Adiós.", language="es-ES")
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
 
