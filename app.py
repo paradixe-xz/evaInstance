@@ -60,7 +60,7 @@ def chatfun(request, text_queue, llm_finished):
     messages.append({'role': 'user', 'content': request})
 
     response = chat(
-        model = 'isa',
+        model = 'ana',
         messages = messages,
         stream = True,
     )

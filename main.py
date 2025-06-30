@@ -205,7 +205,7 @@ async def handle_speech(request: Request):
     history.append({'role': 'user', 'content': speech_result})
     try:
         response_ia = ollama.chat(
-            model='isa',
+            model='ana',
             messages=history
         )
         ai_reply = response_ia['message']['content']
@@ -284,7 +284,7 @@ async def whatsapp_webhook(request: Request):
         history.append({'role': 'user', 'content': body})
         try:
             response = ollama.chat(
-                model='isa',
+                model='ana',
                 messages=history
             )
             ai_reply = response['message']['content']
