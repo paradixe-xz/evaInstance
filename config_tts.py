@@ -46,9 +46,10 @@ def print_tts_status():
 def get_available_voices():
     """Obtiene las voces disponibles de ElevenLabs"""
     try:
-        from elevenlabs import voices
+        from elevenlabs import ElevenLabs
         if ELEVENLABS_API_KEY:
-            available_voices = voices()
+            client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            available_voices = client.voices.get_all()
             return [{"id": voice.voice_id, "name": voice.name} for voice in available_voices]
         else:
             return []

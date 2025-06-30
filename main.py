@@ -13,7 +13,7 @@ from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
 import wave
-from elevenlabs import Client
+from elevenlabs import ElevenLabs
 
 app = FastAPI()
 
@@ -31,7 +31,7 @@ ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  
 # Initialize ElevenLabs client
 elevenlabs_client = None
 if ELEVENLABS_API_KEY:
-    elevenlabs_client = Client(api_key=ELEVENLABS_API_KEY)
+    elevenlabs_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -50,8 +50,8 @@ def generate_speech_elevenlabs(text, output_file):
             print("Error: ElevenLabs client no configurado")
             return False
             
-        # Generar audio con ElevenLabs
-        audio = elevenlabs_client.generate(
+        # Generar audio con ElevenLabs usando el nuevo API
+        audio = elevenlabs_client.text_to_speech.convert(
             text=text,
             voice_id=ELEVENLABS_VOICE_ID,
             model_id="eleven_multilingual_v2"
