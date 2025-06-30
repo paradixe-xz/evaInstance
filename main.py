@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Form
 from pydantic import BaseModel
 from typing import List
 import os
@@ -6,6 +6,7 @@ import subprocess
 from twilio.rest import Client
 from fastapi.responses import Response, PlainTextResponse
 from twilio.twiml.voice_response import VoiceResponse
+import ollama  # Para usar el modelo de chat
 
 app = FastAPI()
 
@@ -97,3 +98,64 @@ async def twilio_voice(request: Request):
     response.say("Sorry, the AI assistant is not available yet.")
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
+
+# --- Historial de chat por usuario (archivo) ---
+def get_chatlog_path(number):
+    return f"chatlog-{number}.txt"
+
+def load_history(number):
+    path = get_chatlog_path(number)
+    if not os.path.exists(path):
+        return []
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    # Formato: alterna 'user:' y 'assistant:'
+    history = []
+    for line in lines:
+        if line.startswith('user:'):
+            history.append({'role': 'user', 'content': line[len('user:'):].strip()})
+        elif line.startswith('assistant:'):
+            history.append({'role': 'assistant', 'content': line[len('assistant:'):].strip()})
+    return history
+
+def append_to_history(number, role, content):
+    path = get_chatlog_path(number)
+    with open(path, 'a', encoding='utf-8') as f:
+        f.write(f"{role}:{content}\n")
+
+# --- Endpoint webhook para WhatsApp (Twilio) ---
+@app.post("/twilio/whatsapp")
+async def whatsapp_webhook(
+    request: Request
+):
+    form = await request.form()
+    from_number = form.get('From', '')
+    body = form.get('Body', '').strip()
+    # El número viene como 'whatsapp:+1234567890', extraer solo el número
+    if from_number.startswith('whatsapp:'):
+        user_number = from_number.replace('whatsapp:', '')
+    else:
+        user_number = from_number
+    # Cargar historial
+    history = load_history(user_number)
+    # Agregar mensaje del usuario
+    append_to_history(user_number, 'user', body)
+    history.append({'role': 'user', 'content': body})
+    # Llamar al modelo (ollama)
+    try:
+        response = ollama.chat(
+            model='isa',  # O el modelo que prefieras
+            messages=history
+        )
+        ai_reply = response['message']['content']
+    except Exception as e:
+        ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+    # Guardar respuesta de la IA
+    append_to_history(user_number, 'assistant', ai_reply)
+    # Responder por WhatsApp
+    client.messages.create(
+        body=ai_reply,
+        from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+        to="whatsapp:" + user_number
+    )
+    return PlainTextResponse("OK")
