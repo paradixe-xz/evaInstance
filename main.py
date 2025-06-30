@@ -107,8 +107,8 @@ def parse_time_input(text: str) -> Optional[datetime]:
     
     # Patrones comunes de tiempo
     patterns = [
-        # "ahora", "ya", "inmediatamente"
-        (r'\b(ahora|ya|inmediatamente|ahorita)\b', lambda: current_time + timedelta(minutes=5)),
+        # "ahora", "ya", "inmediatamente", "ahora mismo"
+        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda: current_time + timedelta(minutes=5)),
         
         # "en X minutos"
         (r'en (\d+) minutos?', lambda m: current_time + timedelta(minutes=int(m.group(1)))),
@@ -643,10 +643,20 @@ async def whatsapp_webhook(request: Request):
         
         if state["stage"] == "initial":
             # Primera interacción - procesar respuesta inicial
-            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro"]):
+            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo"]):
                 # Usuario quiere que lo llame ahora
                 state["stage"] = "waiting_confirmation"
-                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
+                ai_reply = f"""¡Perfecto {state['name']}! 
+
+Para programar tu llamada y explicarte todos los detalles del préstamo, dime a qué hora te gustaría que te llame.
+
+Ejemplos:
+• "Ahora mismo" - Te llamo en 5 minutos
+• "En 2 horas" - Te llamo en 2 horas
+• "A las 3:30 PM" - Te llamo a esa hora
+• "Mañana a las 10:00" - Te llamo mañana
+
+¿Cuándo prefieres que te llame para revisar tu elegibilidad?"""
                 
             elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar"]):
                 # Usuario no quiere llamada
@@ -672,8 +682,16 @@ Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora"
 
 ¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
                 else:
-                    # Respuesta no reconocida
-                    ai_reply = create_whatsapp_form_message("initial", state["name"])
+                    # Respuesta no reconocida - ser más específico
+                    ai_reply = f"""Entiendo {state['name']}. 
+
+Para ayudarte mejor, necesito que me digas específicamente:
+
+✅ "Sí, llámame" - Para que te llame ahora
+⏰ "Llámame a las [hora]" - Para programar una llamada
+❌ "No, gracias" - Para cerrar la conversación
+
+¿Qué prefieres?"""
         
         elif state["stage"] == "waiting_confirmation":
             # Usuario confirmó que quiere llamada - procesar hora
@@ -687,7 +705,21 @@ Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora"
                 # Programar llamada
                 schedule_call(user_number, scheduled_time, state["name"])
                 
-                ai_reply = f"""¡Excelente {state['name']}! 
+                # Si es "ahora mismo", dar respuesta inmediata
+                if any(word in user_response.lower() for word in ["ahora", "ya", "inmediatamente", "ahorita", "ahora mismo"]):
+                    ai_reply = f"""¡Perfecto {state['name']}! 
+
+Te llamaré en 5 minutos para explicarte todos los detalles del préstamo.
+
+📋 En la llamada revisaremos:
+• Tu situación actual
+• Monto que puedes obtener
+• Documentación necesaria
+• Proceso de desembolso
+
+¡Prepárate para la llamada! 📞"""
+                else:
+                    ai_reply = f"""¡Excelente {state['name']}! 
 
 Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
 
@@ -695,7 +727,16 @@ Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora"
 
 ¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
             else:
-                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
+                # Si no reconoce el tiempo, dar opciones más claras
+                ai_reply = f"""Entiendo {state['name']}. 
+
+Para programar tu llamada, dime específicamente:
+• "Ahora mismo" - Te llamo en 5 minutos
+• "En 2 horas" - Te llamo en 2 horas
+• "A las 3:30 PM" - Te llamo a esa hora
+• "Mañana a las 10:00" - Te llamo mañana
+
+¿Cuándo prefieres que te llame?"""
         
         elif state["stage"] == "scheduled_call":
             # Llamada ya programada - verificar si quiere cambiar hora
