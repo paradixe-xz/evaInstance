@@ -66,7 +66,13 @@ def generate_speech_improved(text, output_file):
             if engine:
                 engine.save_to_file(text, output_file)
                 engine.runAndWait()
-                return True
+                # Verificar que el archivo se creó
+                if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
+                    print(f"Audio generado con pyttsx3: {output_file}")
+                    return True
+                else:
+                    print("Archivo de audio no se creó correctamente con pyttsx3")
+                    return False
             else:
                 # Fallback a gTTS
                 tts = gTTS(text, lang="es", slow=False)
@@ -76,7 +82,13 @@ def generate_speech_improved(text, output_file):
             # Usar gTTS mejorado
             tts = gTTS(text, lang="es", slow=False, lang_check=True)
             tts.save(output_file)
-            return True
+            # Verificar que el archivo se creó
+            if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
+                print(f"Audio generado con gTTS: {output_file}")
+                return True
+            else:
+                print("Archivo de audio no se creó correctamente con gTTS")
+                return False
     except Exception as e:
         print(f"Error generando audio: {e}")
         # Fallback final a gTTS básico
@@ -84,12 +96,39 @@ def generate_speech_improved(text, output_file):
             tts = gTTS(text, lang="es")
             tts.save(output_file)
             return True
-        except:
+        except Exception as fallback_error:
+            print(f"Error en fallback: {fallback_error}")
             return False
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+@app.get("/test-tts")
+def test_tts():
+    """Endpoint para probar el TTS"""
+    test_text = "Hola, esto es una prueba del sistema de voz."
+    audio_filename = f"audio/test_{uuid.uuid4()}.wav"
+    
+    print(f"Probando TTS con texto: {test_text}")
+    print(f"Método configurado: {TTS_METHOD}")
+    
+    if generate_speech_improved(test_text, audio_filename):
+        audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
+        return {
+            "success": True,
+            "message": "TTS funcionando correctamente",
+            "audio_url": audio_url,
+            "method": TTS_METHOD,
+            "text": test_text
+        }
+    else:
+        return {
+            "success": False,
+            "message": "Error en TTS",
+            "method": TTS_METHOD,
+            "text": test_text
+        }
 
 # --- Endpoint para crear representante (original) ---
 class CreateRepresentativeRequest(BaseModel):
@@ -197,22 +236,31 @@ async def handle_speech(request: Request):
     
     # Usar TTS mejorado
     audio_filename = f"audio/response_{uuid.uuid4()}.wav"
+    response = VoiceResponse()
+    
+    print(f"Generando audio para: {ai_reply[:50]}...")
     if generate_speech_improved(ai_reply, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
-        response = VoiceResponse()
+        print(f"Audio generado exitosamente: {audio_url}")
         response.play(audio_url)
-        response.gather(
-            input="speech",
-            language="es-ES",
-            action="/twilio/voice/handle_speech",
-            method="POST",
-            timeout=5,
-            speechTimeout="auto"
-        )
     else:
+        print("Error generando audio, usando fallback")
         # Fallback a texto si falla el audio
-        response = VoiceResponse()
         response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
+    
+    # Siempre agregar el gather para continuar la conversación
+    response.gather(
+        input="speech",
+        language="es-ES",
+        action="/twilio/voice/handle_speech",
+        method="POST",
+        timeout=10,
+        speechTimeout="auto"
+    )
+    
+    # Si no hay input después del timeout, terminar la llamada
+    response.say("No se detectó audio. Adiós.", language="es-ES")
+    response.hangup()
     
     return PlainTextResponse(str(response), media_type="application/xml")
 
