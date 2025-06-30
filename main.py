@@ -218,7 +218,6 @@ async def whatsapp_webhook(request: Request):
             to="whatsapp:" + user_number
         )
         print("Respuesta enviada por WhatsApp")
-        return PlainTextResponse("OK")
     except Exception as e:
         print("Error general en el endpoint:", e)
         return PlainTextResponse("Error interno en el servidor", status_code=500)
