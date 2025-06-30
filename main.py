@@ -57,10 +57,11 @@ def generate_speech_elevenlabs(text, output_file):
             model_id="eleven_multilingual_v2"
         )
         
-        # Guardar temporalmente
+        # Guardar temporalmente - el audio es un generador, necesitamos iterarlo
         temp_file = output_file + ".temp.wav"
         with open(temp_file, "wb") as f:
-            f.write(audio.read())
+            for chunk in audio:
+                f.write(chunk)
         
         # Convertir a WAV 8kHz mono para Twilio
         audio_segment = AudioSegment.from_file(temp_file)
