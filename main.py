@@ -14,6 +14,7 @@ from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
 import pyttsx3
+import wave
 
 app = FastAPI()
 
@@ -58,47 +59,34 @@ def setup_tts_engine():
         return None
 
 def generate_speech_improved(text, output_file):
-    """Genera audio usando el método configurado"""
+    """Genera audio usando el método configurado y lo convierte a WAV 8kHz mono para Twilio"""
     try:
+        temp_wav = output_file + ".tmp.wav"
         if TTS_METHOD == "pyttsx3":
-            # Usar TTS offline
             engine = setup_tts_engine()
             if engine:
-                engine.save_to_file(text, output_file)
+                engine.save_to_file(text, temp_wav)
                 engine.runAndWait()
-                # Verificar que el archivo se creó
-                if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
-                    print(f"Audio generado con pyttsx3: {output_file}")
-                    return True
-                else:
-                    print("Archivo de audio no se creó correctamente con pyttsx3")
-                    return False
             else:
-                # Fallback a gTTS
                 tts = gTTS(text, lang="es", slow=False)
-                tts.save(output_file)
-                return True
+                tts.save(temp_wav)
         else:
-            # Usar gTTS mejorado
             tts = gTTS(text, lang="es", slow=False, lang_check=True)
-            tts.save(output_file)
-            # Verificar que el archivo se creó
-            if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
-                print(f"Audio generado con gTTS: {output_file}")
-                return True
-            else:
-                print("Archivo de audio no se creó correctamente con gTTS")
-                return False
+            tts.save(temp_wav)
+        # Convertir a WAV 8kHz mono
+        audio = AudioSegment.from_file(temp_wav)
+        audio = audio.set_frame_rate(8000).set_channels(1)
+        audio.export(output_file, format="wav")
+        os.remove(temp_wav)
+        if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
+            print(f"Audio generado y convertido a WAV 8kHz mono: {output_file}")
+            return True
+        else:
+            print("Archivo de audio no se creó correctamente")
+            return False
     except Exception as e:
         print(f"Error generando audio: {e}")
-        # Fallback final a gTTS básico
-        try:
-            tts = gTTS(text, lang="es")
-            tts.save(output_file)
-            return True
-        except Exception as fallback_error:
-            print(f"Error en fallback: {fallback_error}")
-            return False
+        return False
 
 @app.get("/")
 def read_root():
@@ -234,10 +222,9 @@ async def handle_speech(request: Request):
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
     append_to_history(user_number, 'assistant', ai_reply)
     
-    # Usar TTS mejorado
+    # Usar TTS mejorado y formato compatible
     audio_filename = f"audio/response_{uuid.uuid4()}.wav"
     response = VoiceResponse()
-    
     print(f"Generando audio para: {ai_reply[:50]}...")
     if generate_speech_improved(ai_reply, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
@@ -245,10 +232,8 @@ async def handle_speech(request: Request):
         response.play(audio_url)
     else:
         print("Error generando audio, usando fallback")
-        # Fallback a texto si falla el audio
         response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
-    
-    # Siempre agregar el gather para continuar la conversación
+    # Gather después del play
     response.gather(
         input="speech",
         language="es-ES",
@@ -257,11 +242,8 @@ async def handle_speech(request: Request):
         timeout=10,
         speechTimeout="auto"
     )
-    
-    # Si no hay input después del timeout, terminar la llamada
     response.say("No se detectó audio. Adiós.", language="es-ES")
     response.hangup()
-    
     return PlainTextResponse(str(response), media_type="application/xml")
 
 # --- Historial de chat por usuario (archivo) ---
