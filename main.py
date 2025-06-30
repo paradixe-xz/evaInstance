@@ -184,11 +184,17 @@ def create_whatsapp_form_message(stage: str, name: str = "") -> str:
     """Crea mensajes estructurados con formularios para WhatsApp"""
     
     if stage == "initial":
-        return f"""¡Hola {name}! 👋 Soy Ana, tu asistente virtual.
+        return f"""¡Hola {name}! 👋 Soy Ana, tu asesora de préstamos.
 
-Estoy aquí para ayudarte con información sobre nuestros servicios. 
+Te contacté porque fuiste pre-seleccionado para un préstamo especial de hasta $150 millones con tasas desde 1.6% mensual.
 
-¿Te gustaría que te llame para conversar personalmente? 
+🎯 Beneficios exclusivos:
+• Desembolso en 24-48 horas
+• Solo necesitas cédula vigente
+• Sin embargos
+• Plazos flexibles
+
+¿Te gustaría que te llame para explicarte todos los detalles? 
 
 Responde con:
 ✅ "Sí, llámame" - Para que te llame ahora
@@ -198,9 +204,9 @@ Responde con:
 ¿Qué prefieres?"""
 
     elif stage == "waiting_confirmation":
-        return f"""Perfecto {name}! 
+        return f"""¡Perfecto {name}! 
 
-Para programar tu llamada, dime a qué hora te gustaría que te llame.
+Para programar tu llamada y explicarte todos los detalles del préstamo, dime a qué hora te gustaría que te llame.
 
 Ejemplos:
 • "Llámame a las 3:30 PM"
@@ -208,12 +214,18 @@ Ejemplos:
 • "En 2 horas"
 • "Ahora mismo"
 
-¿A qué hora prefieres que te llame?"""
+¿A qué hora prefieres que te llame para revisar tu elegibilidad?"""
 
     elif stage == "scheduled_call":
         return f"""¡Excelente {name}! 
 
-Tu llamada está programada. Te llamaré en el momento acordado.
+Tu llamada está programada. Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo.
+
+📋 En la llamada revisaremos:
+• Tu situación actual
+• Monto que puedes obtener
+• Documentación necesaria
+• Proceso de desembolso
 
 Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
 
