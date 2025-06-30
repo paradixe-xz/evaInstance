@@ -13,6 +13,11 @@ else
   echo "ffmpeg ya está instalado."
 fi
 
+# Instala dependencias del sistema para TTS
+echo "Instalando dependencias para TTS..."
+apt-get install -y espeak espeak-data
+apt-get install -y portaudio19-dev python3-pyaudio
+
 # Crea entorno virtual si no existe
 if [ ! -d "venv" ]; then
   python3 -m venv venv
