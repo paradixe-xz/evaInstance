@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional, Dict, Any
 import os
 import subprocess
 from twilio.rest import Client
@@ -16,8 +16,17 @@ import wave
 from elevenlabs import ElevenLabs
 import pandas as pd
 import io
+import pytz
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.date import DateTrigger
+import json
+import re
 
 app = FastAPI()
+
+# Configuración de zona horaria (Barranquilla, Colombia)
+TIMEZONE = pytz.timezone('America/Bogota')  # Barranquilla usa la misma zona que Bogotá
 
 # Twilio config (solo variables de entorno, sin valores hardcodeados)
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
@@ -37,6 +46,14 @@ if ELEVENLABS_API_KEY:
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
+# Scheduler para programar llamadas
+scheduler = BackgroundScheduler(timezone=str(TIMEZONE))
+scheduler.start()
+
+# Directorio para almacenar estado de conversaciones
+conversations_dir = "conversations"
+os.makedirs(conversations_dir, exist_ok=True)
+
 # Crea el directorio de audios si no existe
 audio_dir = "audio"
 os.makedirs(audio_dir, exist_ok=True)
@@ -44,6 +61,165 @@ app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 # Obtén la URL base pública desde el entorno
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
+
+# --- Funciones auxiliares para manejo de conversaciones ---
+def get_conversation_file(number: str) -> str:
+    """Obtiene la ruta del archivo de conversación para un número"""
+    return os.path.join(conversations_dir, f"conversation-{number}.json")
+
+def load_conversation_state(number: str) -> Dict[str, Any]:
+    """Carga el estado de la conversación de un usuario"""
+    file_path = get_conversation_file(number)
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error cargando conversación para {number}: {e}")
+    
+    # Estado inicial por defecto
+    return {
+        "stage": "initial",  # initial, waiting_confirmation, scheduled_call, completed
+        "name": "",
+        "scheduled_time": None,
+        "call_scheduled": False,
+        "last_interaction": datetime.now(TIMEZONE).isoformat(),
+        "messages_sent": 0
+    }
+
+def save_conversation_state(number: str, state: Dict[str, Any]):
+    """Guarda el estado de la conversación de un usuario"""
+    file_path = get_conversation_file(number)
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(state, f, indent=2, default=str)
+    except Exception as e:
+        print(f"Error guardando conversación para {number}: {e}")
+
+def get_current_time() -> datetime:
+    """Obtiene la hora actual en Barranquilla"""
+    return datetime.now(TIMEZONE)
+
+def parse_time_input(text: str) -> Optional[datetime]:
+    """Parsea texto de tiempo del usuario y retorna datetime"""
+    text = text.lower().strip()
+    current_time = get_current_time()
+    
+    # Patrones comunes de tiempo
+    patterns = [
+        # "ahora", "ya", "inmediatamente"
+        (r'\b(ahora|ya|inmediatamente|ahorita)\b', lambda: current_time + timedelta(minutes=5)),
+        
+        # "en X minutos"
+        (r'en (\d+) minutos?', lambda m: current_time + timedelta(minutes=int(m.group(1)))),
+        
+        # "en X horas"
+        (r'en (\d+) horas?', lambda m: current_time + timedelta(hours=int(m.group(1)))),
+        
+        # "a las X:Y" (formato 24h)
+        (r'a las (\d{1,2}):(\d{2})', lambda m: current_time.replace(
+            hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0
+        )),
+        
+        # "a las X:Y AM/PM" (formato 12h)
+        (r'a las (\d{1,2}):(\d{2})\s*(am|pm)', lambda m: 
+            current_time.replace(
+                hour=int(m.group(1)) + (12 if m.group(3) == 'pm' and int(m.group(1)) != 12 else 0),
+                minute=int(m.group(2)), second=0, microsecond=0
+            )
+        ),
+        
+        # "mañana a las X:Y"
+        (r'mañana a las (\d{1,2}):(\d{2})', lambda m: 
+            (current_time + timedelta(days=1)).replace(
+                hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0
+            )
+        ),
+    ]
+    
+    for pattern, time_func in patterns:
+        match = re.search(pattern, text)
+        if match:
+            try:
+                return time_func(match) if callable(time_func) else time_func()
+            except Exception as e:
+                print(f"Error parseando tiempo: {e}")
+                continue
+    
+    return None
+
+def schedule_call(number: str, scheduled_time: datetime, name: str):
+    """Programa una llamada para un tiempo específico"""
+    job_id = f"call_{number}_{scheduled_time.strftime('%Y%m%d_%H%M%S')}"
+    
+    def make_call():
+        try:
+            print(f"Ejecutando llamada programada para {number} ({name})")
+            call = client.calls.create(
+                to=number,
+                from_=TWILIO_PHONE_NUMBER,
+                url=TWILIO_WEBHOOK_URL
+            )
+            print(f"Llamada iniciada: {call.sid}")
+            
+            # Actualizar estado
+            state = load_conversation_state(number)
+            state["stage"] = "call_in_progress"
+            state["call_sid"] = call.sid
+            save_conversation_state(number, state)
+            
+        except Exception as e:
+            print(f"Error ejecutando llamada programada para {number}: {e}")
+    
+    scheduler.add_job(
+        func=make_call,
+        trigger=DateTrigger(run_date=scheduled_time),
+        id=job_id,
+        replace_existing=True
+    )
+    
+    print(f"Llamada programada para {number} a las {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+def create_whatsapp_form_message(stage: str, name: str = "") -> str:
+    """Crea mensajes estructurados con formularios para WhatsApp"""
+    
+    if stage == "initial":
+        return f"""¡Hola {name}! 👋 Soy Ana, tu asistente virtual.
+
+Estoy aquí para ayudarte con información sobre nuestros servicios. 
+
+¿Te gustaría que te llame para conversar personalmente? 
+
+Responde con:
+✅ "Sí, llámame" - Para que te llame ahora
+⏰ "Llámame a las [hora]" - Para programar una llamada
+❌ "No, gracias" - Para cerrar la conversación
+
+¿Qué prefieres?"""
+
+    elif stage == "waiting_confirmation":
+        return f"""Perfecto {name}! 
+
+Para programar tu llamada, dime a qué hora te gustaría que te llame.
+
+Ejemplos:
+• "Llámame a las 3:30 PM"
+• "Mañana a las 10:00"
+• "En 2 horas"
+• "Ahora mismo"
+
+¿A qué hora prefieres que te llame?"""
+
+    elif stage == "scheduled_call":
+        return f"""¡Excelente {name}! 
+
+Tu llamada está programada. Te llamaré en el momento acordado.
+
+Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
+
+¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+
+    return "Gracias por tu tiempo. ¡Que tengas un excelente día!"
 
 def generate_speech_elevenlabs(text, output_file):
     """Genera audio usando ElevenLabs y lo convierte a WAV 8kHz mono para Twilio"""
@@ -216,26 +392,27 @@ async def send_numbers(file: UploadFile = File(...)):
         results = []
         for contact in valid_numbers:
             try:
-                # Enviar mensaje de WhatsApp
+                # Inicializar estado de conversación
+                state = load_conversation_state(contact['number'])
+                state["name"] = contact['name']
+                state["stage"] = "initial"
+                state["last_interaction"] = get_current_time().isoformat()
+                save_conversation_state(contact['number'], state)
+                
+                # Enviar mensaje inicial de WhatsApp con formulario
+                initial_message = create_whatsapp_form_message("initial", contact['name'])
                 whatsapp_message = client.messages.create(
-                    body=f"Hola {contact['name']}, soy Ana tu asistente virtual. Te llamaré en unos momentos.",
+                    body=initial_message,
                     from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
                     to="whatsapp:" + contact['number']
-                )
-                
-                # Iniciar llamada
-                call = client.calls.create(
-                    to=contact['number'],
-                    from_=TWILIO_PHONE_NUMBER,
-                    url=TWILIO_WEBHOOK_URL
                 )
                 
                 results.append({
                     "name": contact['name'],
                     "to": contact['number'],
                     "whatsapp_sid": whatsapp_message.sid,
-                    "call_sid": call.sid,
-                    "status": "success"
+                    "status": "initial_message_sent",
+                    "message": "Mensaje inicial enviado - esperando confirmación del usuario"
                 })
                 
             except Exception as e:
@@ -259,6 +436,52 @@ async def send_numbers(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando el archivo: {str(e)}")
+
+@app.get("/conversations/status")
+def get_conversations_status():
+    """Endpoint para ver el estado de todas las conversaciones"""
+    try:
+        conversations = []
+        current_time = get_current_time()
+        
+        for filename in os.listdir(conversations_dir):
+            if filename.startswith("conversation-") and filename.endswith(".json"):
+                number = filename.replace("conversation-", "").replace(".json", "")
+                
+                try:
+                    with open(os.path.join(conversations_dir, filename), 'r', encoding='utf-8') as f:
+                        state = json.load(f)
+                    
+                    # Calcular tiempo desde última interacción
+                    last_interaction = datetime.fromisoformat(state.get("last_interaction", current_time.isoformat()))
+                    time_diff = current_time - last_interaction.replace(tzinfo=TIMEZONE)
+                    
+                    conversations.append({
+                        "number": number,
+                        "name": state.get("name", "Sin nombre"),
+                        "stage": state.get("stage", "unknown"),
+                        "messages_sent": state.get("messages_sent", 0),
+                        "call_scheduled": state.get("call_scheduled", False),
+                        "scheduled_time": state.get("scheduled_time"),
+                        "last_interaction": state.get("last_interaction"),
+                        "time_since_last_interaction": str(time_diff).split('.')[0] if time_diff.total_seconds() > 0 else "Ahora mismo"
+                    })
+                except Exception as e:
+                    print(f"Error leyendo conversación {filename}: {e}")
+                    continue
+        
+        # Ordenar por última interacción (más reciente primero)
+        conversations.sort(key=lambda x: x["last_interaction"], reverse=True)
+        
+        return {
+            "total_conversations": len(conversations),
+            "current_time": current_time.isoformat(),
+            "timezone": str(TIMEZONE),
+            "conversations": conversations
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo estado de conversaciones: {str(e)}")
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
@@ -379,40 +602,120 @@ def append_to_history(number, role, content):
 # --- Endpoint webhook para WhatsApp (Twilio) ---
 @app.post("/twilio/whatsapp")
 async def whatsapp_webhook(request: Request):
-    print("¡Llego un mensaje de Twilio!")
+    print("¡Llego un mensaje de WhatsApp!")
     try:
         form = await request.form()
         print("Form recibido:", form)
         from_number = form.get('From', '')
         body = form.get('Body', '').strip()
         print("From:", from_number, "Body:", body)
+        
         if from_number.startswith('whatsapp:'):
             user_number = from_number.replace('whatsapp:', '').strip()
         else:
             user_number = from_number.strip()
+        
         if not user_number.startswith('+'):
             user_number = '+' + user_number
+        
         print("User number:", user_number)
-        history = load_history(user_number)
-        print("Historial cargado:", history)
+        
+        # Cargar estado de conversación
+        state = load_conversation_state(user_number)
+        state["last_interaction"] = get_current_time().isoformat()
+        state["messages_sent"] += 1
+        
+        # Procesar respuesta según el estado actual
+        user_response = body.lower().strip()
+        ai_reply = ""
+        
+        if state["stage"] == "initial":
+            # Primera interacción - procesar respuesta inicial
+            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro"]):
+                # Usuario quiere que lo llame ahora
+                state["stage"] = "waiting_confirmation"
+                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
+                
+            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar"]):
+                # Usuario no quiere llamada
+                state["stage"] = "completed"
+                ai_reply = "Entendido. Gracias por tu tiempo. ¡Que tengas un excelente día! 😊"
+                
+            else:
+                # Buscar si menciona una hora específica
+                scheduled_time = parse_time_input(user_response)
+                if scheduled_time:
+                    state["stage"] = "scheduled_call"
+                    state["scheduled_time"] = scheduled_time.isoformat()
+                    state["call_scheduled"] = True
+                    
+                    # Programar llamada
+                    schedule_call(user_number, scheduled_time, state["name"])
+                    
+                    ai_reply = f"""¡Perfecto {state['name']}! 
+
+Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
+
+Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
+
+¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+                else:
+                    # Respuesta no reconocida
+                    ai_reply = create_whatsapp_form_message("initial", state["name"])
+        
+        elif state["stage"] == "waiting_confirmation":
+            # Usuario confirmó que quiere llamada - procesar hora
+            scheduled_time = parse_time_input(user_response)
+            
+            if scheduled_time:
+                state["stage"] = "scheduled_call"
+                state["scheduled_time"] = scheduled_time.isoformat()
+                state["call_scheduled"] = True
+                
+                # Programar llamada
+                schedule_call(user_number, scheduled_time, state["name"])
+                
+                ai_reply = f"""¡Excelente {state['name']}! 
+
+Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
+
+Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
+
+¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+            else:
+                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
+        
+        elif state["stage"] == "scheduled_call":
+            # Llamada ya programada - verificar si quiere cambiar hora
+            if any(word in user_response for word in ["cambiar", "cambio", "otra hora", "diferente"]):
+                state["stage"] = "waiting_confirmation"
+                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
+            elif any(word in user_response for word in ["cancelar", "no", "gracias"]):
+                state["stage"] = "completed"
+                ai_reply = "Entendido. He cancelado la llamada programada. ¡Que tengas un excelente día! 😊"
+            else:
+                ai_reply = create_whatsapp_form_message("scheduled_call", state["name"])
+        
+        else:
+            # Estado completado o desconocido
+            ai_reply = "Gracias por tu tiempo. ¡Que tengas un excelente día! 😊"
+        
+        # Guardar estado actualizado
+        save_conversation_state(user_number, state)
+        
+        # Guardar en historial para IA
         append_to_history(user_number, 'user', body)
-        history.append({'role': 'user', 'content': body})
-        try:
-            response = ollama.chat(
-                model='ana',
-                messages=history
-            )
-            ai_reply = response['message']['content']
-        except Exception as e:
-            print("Error llamando a ollama:", e)
-            ai_reply = "Lo siento, hubo un error procesando tu mensaje."
         append_to_history(user_number, 'assistant', ai_reply)
+        
+        # Enviar respuesta
         client.messages.create(
             body=ai_reply,
             from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
             to="whatsapp:" + user_number
         )
-        print("Respuesta enviada por WhatsApp")
+        
+        print(f"Respuesta enviada por WhatsApp a {user_number}: {ai_reply[:50]}...")
+        
     except Exception as e:
         print("Error general en el endpoint:", e)
         return PlainTextResponse("Error interno en el servidor", status_code=500)

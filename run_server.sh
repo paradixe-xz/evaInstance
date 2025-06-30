@@ -36,6 +36,50 @@ if [ -f ".env" ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
-# Usa watchmedo para reiniciar el servidor si hay cambios en .py o requirements.txt
-watchmedo auto-restart --patterns="*.py;requirements.txt" --recursive -- \
-  uvicorn main:app --host 0.0.0.0 --port 4000 
+# Función para limpiar procesos al salir
+cleanup() {
+    echo ""
+    echo "🛑 Deteniendo todos los procesos..."
+    kill $SERVER_PID $MONITOR_PID 2>/dev/null
+    echo "✅ Procesos detenidos"
+    exit 0
+}
+
+# Capturar Ctrl+C
+trap cleanup SIGINT
+
+echo "🚀 Iniciando evaInstance con monitor de estado..."
+echo "📊 El estado se actualizará automáticamente en status.txt"
+echo "🌐 Servidor disponible en: http://localhost:4000"
+echo "📁 Para ver el estado: cat status.txt"
+echo "⏹️  Presiona Ctrl+C para detener todo"
+echo ""
+
+# Iniciar monitor de estado en segundo plano
+echo "📊 Iniciando monitor de estado..."
+python3 status_monitor.py > /dev/null 2>&1
+
+# Función para el monitor que se ejecuta cada 30 segundos
+monitor_loop() {
+    while true; do
+        python3 status_monitor.py > /dev/null 2>&1
+        sleep 30
+    done
+}
+
+# Iniciar monitor en segundo plano
+monitor_loop &
+MONITOR_PID=$!
+
+echo "✅ Monitor iniciado (PID: $MONITOR_PID)"
+
+# Iniciar servidor principal
+echo "🌐 Iniciando servidor principal..."
+uvicorn main:app --host 0.0.0.0 --port 4000 &
+SERVER_PID=$!
+
+echo "✅ Servidor iniciado (PID: $SERVER_PID)"
+echo ""
+
+# Esperar a que termine cualquiera de los procesos
+wait 

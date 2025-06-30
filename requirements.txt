@@ -9,3 +9,6 @@ pydub
 elevenlabs
 pandas
 openpyxl
+pytz
+apscheduler
+psutil
