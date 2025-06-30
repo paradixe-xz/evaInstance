@@ -3,7 +3,15 @@
 # Instala dependencias del sistema (ajusta según tu distro)
 sudo apt update
 sudo apt install -y python3 python3-pip python3-venv
-sudo apt-get install -y ffmpeg
+
+# Instala ffmpeg si no está instalado
+echo "Verificando instalación de ffmpeg..."
+if ! command -v ffmpeg &> /dev/null; then
+  echo "ffmpeg no está instalado. Instalando..."
+  sudo apt-get install -y ffmpeg
+else
+  echo "ffmpeg ya está instalado."
+fi
 
 # Crea entorno virtual si no existe
 if [ ! -d "venv" ]; then
