@@ -13,6 +13,7 @@ from gtts import gTTS
 from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
+import pyttsx3
 
 app = FastAPI()
 
@@ -31,6 +32,60 @@ app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 # Obtén la URL base pública desde el entorno
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
+
+# Configuración de TTS mejorado
+TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')  # 'gtts_improved' o 'pyttsx3'
+
+def setup_tts_engine():
+    """Configura el motor de TTS offline si está disponible"""
+    try:
+        engine = pyttsx3.init()
+        # Buscar voz en español
+        voices = engine.getProperty('voices')
+        spanish_voice = None
+        for voice in voices:
+            if 'spanish' in voice.name.lower() or 'español' in voice.name.lower():
+                spanish_voice = voice.id
+                break
+        if spanish_voice:
+            engine.setProperty('voice', spanish_voice)
+        # Configurar velocidad y volumen
+        engine.setProperty('rate', 150)
+        engine.setProperty('volume', 0.9)
+        return engine
+    except Exception as e:
+        print(f"Error configurando TTS offline: {e}")
+        return None
+
+def generate_speech_improved(text, output_file):
+    """Genera audio usando el método configurado"""
+    try:
+        if TTS_METHOD == "pyttsx3":
+            # Usar TTS offline
+            engine = setup_tts_engine()
+            if engine:
+                engine.save_to_file(text, output_file)
+                engine.runAndWait()
+                return True
+            else:
+                # Fallback a gTTS
+                tts = gTTS(text, lang="es", slow=False)
+                tts.save(output_file)
+                return True
+        else:
+            # Usar gTTS mejorado
+            tts = gTTS(text, lang="es", slow=False, lang_check=True)
+            tts.save(output_file)
+            return True
+    except Exception as e:
+        print(f"Error generando audio: {e}")
+        # Fallback final a gTTS básico
+        try:
+            tts = gTTS(text, lang="es")
+            tts.save(output_file)
+            return True
+        except:
+            return False
 
 @app.get("/")
 def read_root():
@@ -139,23 +194,26 @@ async def handle_speech(request: Request):
         print("Error llamando a ollama:", e)
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
     append_to_history(user_number, 'assistant', ai_reply)
-    tts = gTTS(ai_reply, lang="es")
-    audio_filename = f"audio/response_{uuid.uuid4()}.mp3"
-    tts.save(audio_filename)
-    wav_filename = audio_filename.replace('.mp3', '.wav')
-    sound = AudioSegment.from_mp3(audio_filename)
-    sound.export(wav_filename, format="wav")
-    audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(wav_filename)}"
-    response = VoiceResponse()
-    response.play(audio_url)
-    response.gather(
-        input="speech",
-        language="es-ES",
-        action="/twilio/voice/handle_speech",
-        method="POST",
-        timeout=5,
-        speechTimeout="auto"
-    )
+    
+    # Usar TTS mejorado
+    audio_filename = f"audio/response_{uuid.uuid4()}.wav"
+    if generate_speech_improved(ai_reply, audio_filename):
+        audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
+        response = VoiceResponse()
+        response.play(audio_url)
+        response.gather(
+            input="speech",
+            language="es-ES",
+            action="/twilio/voice/handle_speech",
+            method="POST",
+            timeout=5,
+            speechTimeout="auto"
+        )
+    else:
+        # Fallback a texto si falla el audio
+        response = VoiceResponse()
+        response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
+    
     return PlainTextResponse(str(response), media_type="application/xml")
 
 # --- Historial de chat por usuario (archivo) ---

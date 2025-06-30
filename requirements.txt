@@ -7,3 +7,4 @@ pygame
 ollama 
 python-multipart
 pydub
+pyttsx3

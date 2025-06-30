@@ -10,6 +10,7 @@ from pygame import mixer
 import threading
 import queue
 import time
+import pyttsx3
 
 mixer.init()
 
@@ -21,7 +22,64 @@ numtext = 0
 numtts = 0 
 numaudio = 0
 
-messages = [] 
+messages = []
+
+# Configuración de TTS mejorado
+TTS_METHOD = os.getenv('TTS_METHOD', 'gtts_improved')
+
+def setup_tts_engine():
+    """Configura el motor de TTS offline"""
+    try:
+        engine = pyttsx3.init()
+        voices = engine.getProperty('voices')
+        spanish_voice = None
+        for voice in voices:
+            if 'spanish' in voice.name.lower() or 'español' in voice.name.lower():
+                spanish_voice = voice.id
+                break
+        if spanish_voice:
+            engine.setProperty('voice', spanish_voice)
+        engine.setProperty('rate', 150)
+        engine.setProperty('volume', 0.9)
+        return engine
+    except Exception as e:
+        print(f"Error configurando TTS offline: {e}")
+        return None
+
+def generate_speech_improved(text, mp3file):
+    """Genera audio usando el método configurado"""
+    try:
+        if TTS_METHOD == "pyttsx3":
+            engine = setup_tts_engine()
+            if engine:
+                # pyttsx3 genera directamente en formato wav, necesitamos convertir
+                temp_wav = BytesIO()
+                engine.save_to_file(text, temp_wav)
+                engine.runAndWait()
+                # Convertir wav a mp3 usando pydub
+                from pydub import AudioSegment
+                audio = AudioSegment.from_wav(temp_wav)
+                audio.export(mp3file, format="mp3")
+                return True
+            else:
+                # Fallback a gTTS
+                tts = gTTS(text, lang="en", tld='us')
+                tts.write_to_fp(mp3file)
+                return True
+        else:
+            # Usar gTTS mejorado
+            tts = gTTS(text, lang="en", tld='us', slow=False)
+            tts.write_to_fp(mp3file)
+            return True
+    except Exception as e:
+        print(f"Error generando audio: {e}")
+        # Fallback final
+        try:
+            tts = gTTS(text, lang="en", tld='us')
+            tts.write_to_fp(mp3file)
+            return True
+        except:
+            return False 
 
 def chatfun(request, text_queue, llm_finished):
     global numtext, messages
@@ -63,18 +121,19 @@ def chatfun(request, text_queue, llm_finished):
 
 def speak_text(text):
     mp3file = BytesIO()
-    tts = gTTS(text, lang="en", tld = 'us') 
-    tts.write_to_fp(mp3file)
-    mp3file.seek(0)
-    try:
-        mixer.music.load(mp3file, "mp3")
-        mixer.music.play()
-        while mixer.music.get_busy(): 
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        mixer.music.stop()
+    if generate_speech_improved(text, mp3file):
+        mp3file.seek(0)
+        try:
+            mixer.music.load(mp3file, "mp3")
+            mixer.music.play()
+            while mixer.music.get_busy(): 
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            mixer.music.stop()
+            mp3file.close()
         mp3file.close()
-    mp3file.close()	
+    else:
+        print("Error generando audio para reproducción")	
 
 def text2speech(text_queue, textdone,llm_finished, audio_queue, stop_event):
     global numtext, numtts
@@ -83,9 +142,8 @@ def text2speech(text_queue, textdone,llm_finished, audio_queue, stop_event):
             text = text_queue.get(timeout = 0.5)  # Wait for 2 second for an item
             numtts += 1 
             mp3file = BytesIO()
-            tts = gTTS(text, lang="en", tld = 'us') 
-            tts.write_to_fp(mp3file)
-            audio_queue.put(mp3file)
+            if generate_speech_improved(text, mp3file):
+                audio_queue.put(mp3file)
             text_queue.task_done()
         if llm_finished.is_set() and numtts == numtext: 
             time.sleep(0.2)
