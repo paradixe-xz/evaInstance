@@ -127,34 +127,44 @@ def append_to_history(number, role, content):
 @app.post("/twilio/whatsapp")
 async def whatsapp_webhook(request: Request):
     print("¡Llego un mensaje de Twilio!")
-    form = await request.form()
-    from_number = form.get('From', '')
-    body = form.get('Body', '').strip()
-    # El número viene como 'whatsapp:+1234567890', extraer solo el número
-    if from_number.startswith('whatsapp:'):
-        user_number = from_number.replace('whatsapp:', '')
-    else:
-        user_number = from_number
-    # Cargar historial
-    history = load_history(user_number)
-    # Agregar mensaje del usuario
-    append_to_history(user_number, 'user', body)
-    history.append({'role': 'user', 'content': body})
-    # Llamar al modelo (ollama)
     try:
-        response = ollama.chat(
-            model='isa',  # O el modelo que prefieras
-            messages=history
+        form = await request.form()
+        print("Form recibido:", form)
+        from_number = form.get('From', '')
+        body = form.get('Body', '').strip()
+        print("From:", from_number, "Body:", body)
+        # El número viene como 'whatsapp:+1234567890', extraer solo el número
+        if from_number.startswith('whatsapp:'):
+            user_number = from_number.replace('whatsapp:', '')
+        else:
+            user_number = from_number
+        print("User number:", user_number)
+        # Cargar historial
+        history = load_history(user_number)
+        print("Historial cargado:", history)
+        # Agregar mensaje del usuario
+        append_to_history(user_number, 'user', body)
+        history.append({'role': 'user', 'content': body})
+        # Llamar al modelo (ollama)
+        try:
+            response = ollama.chat(
+                model='isa',  # O el modelo que prefieras
+                messages=history
+            )
+            ai_reply = response['message']['content']
+        except Exception as e:
+            print("Error llamando a ollama:", e)
+            ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+        # Guardar respuesta de la IA
+        append_to_history(user_number, 'assistant', ai_reply)
+        # Responder por WhatsApp
+        client.messages.create(
+            body=ai_reply,
+            from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+            to="whatsapp:" + user_number
         )
-        ai_reply = response['message']['content']
+        print("Respuesta enviada por WhatsApp")
+        return PlainTextResponse("OK")
     except Exception as e:
-        ai_reply = "Lo siento, hubo un error procesando tu mensaje."
-    # Guardar respuesta de la IA
-    append_to_history(user_number, 'assistant', ai_reply)
-    # Responder por WhatsApp
-    client.messages.create(
-        body=ai_reply,
-        from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
-        to="whatsapp:" + user_number
-    )
-    return PlainTextResponse("OK")
+        print("Error general en el endpoint:", e)
+        return PlainTextResponse("Error interno en el servidor", status_code=500)

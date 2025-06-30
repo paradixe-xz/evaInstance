@@ -5,3 +5,4 @@ speechrecognition
 gtts
 pygame
 ollama 
+python-multipart
