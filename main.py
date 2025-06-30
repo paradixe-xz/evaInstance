@@ -125,9 +125,8 @@ def append_to_history(number, role, content):
 
 # --- Endpoint webhook para WhatsApp (Twilio) ---
 @app.post("/twilio/whatsapp")
-async def whatsapp_webhook(
-    request: Request
-):
+async def whatsapp_webhook(request: Request):
+    print("¡Llego un mensaje de Twilio!")
     form = await request.form()
     from_number = form.get('From', '')
     body = form.get('Body', '').strip()
