@@ -13,6 +13,7 @@ app = FastAPI()
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER')
 TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -61,18 +62,28 @@ class PhoneNumbersRequest(BaseModel):
 def send_numbers(req: PhoneNumbersRequest):
     print("Números recibidos:", req.numbers)
     try:
-        # Initiate a call to each number using Twilio
-        call_results = []
+        results = []
         for number in req.numbers:
+            # Enviar mensaje de WhatsApp
+            whatsapp_message = client.messages.create(
+                body="Hola",
+                from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+                to="whatsapp:" + number
+            )
+            # Iniciar llamada
             call = client.calls.create(
                 to=number,
                 from_=TWILIO_PHONE_NUMBER,
-                url=TWILIO_WEBHOOK_URL  # Twilio will request this URL when the call is answered
+                url=TWILIO_WEBHOOK_URL
             )
-            call_results.append({"to": number, "sid": call.sid})
-        return {"message": "Números recibidos correctamente, llamadas iniciadas", "results": call_results}
+            results.append({
+                "to": number,
+                "whatsapp_sid": whatsapp_message.sid,
+                "call_sid": call.sid
+            })
+        return {"message": "Mensajes y llamadas iniciados correctamente", "results": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando los números o iniciando llamadas: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando los números: {e}")
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
