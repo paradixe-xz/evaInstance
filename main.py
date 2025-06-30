@@ -108,7 +108,7 @@ def parse_time_input(text: str) -> Optional[datetime]:
     # Patrones comunes de tiempo
     patterns = [
         # "ahora", "ya", "inmediatamente", "ahora mismo"
-        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda: current_time + timedelta(minutes=5)),
+        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda m: current_time + timedelta(minutes=5)),
         
         # "en X minutos"
         (r'en (\d+) minutos?', lambda m: current_time + timedelta(minutes=int(m.group(1)))),
