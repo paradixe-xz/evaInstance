@@ -10,7 +10,7 @@ import threading
 import queue
 import time
 from pydub import AudioSegment
-from elevenlabs import generate, save, set_api_key
+from elevenlabs import Client
 
 mixer.init()
 
@@ -28,25 +28,28 @@ messages = []
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')
 
+# Initialize ElevenLabs client
+elevenlabs_client = None
 if ELEVENLABS_API_KEY:
-    set_api_key(ELEVENLABS_API_KEY)
+    elevenlabs_client = Client(api_key=ELEVENLABS_API_KEY)
 
 def generate_speech_elevenlabs(text, wavfile):
     """Genera audio usando ElevenLabs"""
     try:
-        if not ELEVENLABS_API_KEY:
-            print("Error: ELEVENLABS_API_KEY no configurada")
+        if not elevenlabs_client:
+            print("Error: ElevenLabs client no configurado")
             return False
             
         # Generar audio con ElevenLabs
-        audio = generate(
+        audio = elevenlabs_client.generate(
             text=text,
-            voice=ELEVENLABS_VOICE_ID,
-            model="eleven_multilingual_v2"
+            voice_id=ELEVENLABS_VOICE_ID,
+            model_id="eleven_multilingual_v2"
         )
         
         # Guardar directamente como WAV
-        save(audio, wavfile)
+        with open(wavfile, "wb") as f:
+            f.write(audio)
         return True
     except Exception as e:
         print(f"Error generando audio con ElevenLabs: {e}")

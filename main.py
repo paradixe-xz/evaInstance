@@ -13,7 +13,7 @@ from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
 import wave
-from elevenlabs import generate, save, set_api_key, voices
+from elevenlabs import generate, save, set_api_key, voices, Client
 
 app = FastAPI()
 
@@ -28,8 +28,10 @@ TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  # Rachel voice
 
+# Initialize ElevenLabs client
+elevenlabs_client = None
 if ELEVENLABS_API_KEY:
-    set_api_key(ELEVENLABS_API_KEY)
+    elevenlabs_client = Client(api_key=ELEVENLABS_API_KEY)
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -44,20 +46,21 @@ PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 def generate_speech_elevenlabs(text, output_file):
     """Genera audio usando ElevenLabs y lo convierte a WAV 8kHz mono para Twilio"""
     try:
-        if not ELEVENLABS_API_KEY:
-            print("Error: ELEVENLABS_API_KEY no configurada")
+        if not elevenlabs_client:
+            print("Error: ElevenLabs client no configurado")
             return False
             
         # Generar audio con ElevenLabs
-        audio = generate(
+        audio = elevenlabs_client.generate(
             text=text,
-            voice=ELEVENLABS_VOICE_ID,
-            model="eleven_multilingual_v2"
+            voice_id=ELEVENLABS_VOICE_ID,
+            model_id="eleven_multilingual_v2"
         )
         
         # Guardar temporalmente
         temp_file = output_file + ".temp.wav"
-        save(audio, temp_file)
+        with open(temp_file, "wb") as f:
+            f.write(audio)
         
         # Convertir a WAV 8kHz mono para Twilio
         audio_segment = AudioSegment.from_file(temp_file)
