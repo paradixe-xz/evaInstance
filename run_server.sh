@@ -24,4 +24,4 @@ fi
 
 # Usa watchmedo para reiniciar el servidor si hay cambios en .py o requirements.txt
 watchmedo auto-restart --patterns="*.py;requirements.txt" --recursive -- \
-  uvicorn main:app --host 0.0.0.0 --port 8000 
+  uvicorn main:app --host 0.0.0.0 --port 4000 
