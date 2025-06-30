@@ -13,7 +13,7 @@ from pydub import AudioSegment
 import uuid
 from fastapi.staticfiles import StaticFiles
 import wave
-from elevenlabs import generate, save, set_api_key, voices, Client
+from elevenlabs import Client
 
 app = FastAPI()
 
