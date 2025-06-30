@@ -133,11 +133,13 @@ async def whatsapp_webhook(request: Request):
         from_number = form.get('From', '')
         body = form.get('Body', '').strip()
         print("From:", from_number, "Body:", body)
-        # El número viene como 'whatsapp:+1234567890', extraer solo el número
+        # El número viene como 'whatsapp:+1234567890', extraer solo el número y asegurar que tenga '+'
         if from_number.startswith('whatsapp:'):
-            user_number = from_number.replace('whatsapp:', '')
+            user_number = from_number.replace('whatsapp:', '').strip()
         else:
-            user_number = from_number
+            user_number = from_number.strip()
+        if not user_number.startswith('+'):
+            user_number = '+' + user_number
         print("User number:", user_number)
         # Cargar historial
         history = load_history(user_number)
