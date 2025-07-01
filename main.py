@@ -672,12 +672,36 @@ async def whatsapp_webhook(request: Request):
         
         if state["stage"] == "initial":
             # Primera interacción - procesar respuesta inicial
-            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo"]):
-                # Usuario quiere que lo llame ahora
-                state["stage"] = "waiting_confirmation"
-                ai_reply = f"""🎯 ¡Perfecto {state['name']}! 
+            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo", "ya", "inmediatamente", "ahorita", "perfecto", "dale", "vamos"]):
+                # Usuario quiere que lo llame ahora - llamar inmediatamente
+                print(f"¡Usuario {state['name']} dice que SÍ! Programando llamada inmediata...")
+                scheduled_time = get_current_time() + timedelta(minutes=1)
+                state["stage"] = "scheduled_call"
+                state["scheduled_time"] = scheduled_time.isoformat()
+                state["call_scheduled"] = True
+                
+                # Programar llamada
+                schedule_call(user_number, scheduled_time, state["name"])
+                
+                ai_reply = f"""🚀 ¡Perfecto {state['name']}! 
 
-Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime cuándo te parece mejor:
+Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVANZA.
+
+📋 En la llamada de 10 minutos revisaremos:
+• Tu situación actual y capacidad de pago
+• Cómo podemos bajarte esa cuota que te tiene apretado
+• Monto que puedes obtener (hasta $150 millones)
+• Documentación necesaria (solo cédula vigente)
+• Proceso de desembolso (24-48 horas)
+
+¡Prepárate para mejorar tu salud financiera! 💰💪📞"""
+                
+            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar", "no ahora", "después", "más tarde"]):
+                # Usuario no quiere llamada ahora - permitir escoger hora
+                state["stage"] = "waiting_confirmation"
+                ai_reply = f"""Entiendo {state['name']}. 
+
+¿Cuándo te viene mejor para que te llame?
 
 ⏰ Opciones:
 • "Ahora mismo" - Te llamo inmediatamente
@@ -685,12 +709,7 @@ Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
 
-¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
-                
-            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar"]):
-                # Usuario no quiere llamada
-                state["stage"] = "completed"
-                ai_reply = "Entendido. Gracias por tu tiempo. ¡Que tengas un excelente día! 😊"
+¿Cuándo te parece mejor? 💰"""
                 
             else:
                 # Buscar si menciona una hora específica
@@ -716,8 +735,8 @@ Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora"
 
 Para ayudarte mejor, necesito que me digas específicamente:
 
-✅ "Sí, llámame" - Para que te llame ahora
-⏰ "Llámame a las [hora]" - Para programar una llamada
+✅ "Sí, llámame" - Para que te llame inmediatamente
+⏰ "No ahora" - Para escoger otra hora
 ❌ "No, gracias" - Para cerrar la conversación
 
 ¿Qué prefieres?"""
