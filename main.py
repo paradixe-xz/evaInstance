@@ -108,7 +108,7 @@ def parse_time_input(text: str) -> Optional[datetime]:
     # Patrones comunes de tiempo
     patterns = [
         # "ahora", "ya", "inmediatamente", "ahora mismo"
-        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda m: current_time + timedelta(minutes=5)),
+        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda m: current_time + timedelta(minutes=1)),
         
         # "en X minutos"
         (r'en (\d+) minutos?', lambda m: current_time + timedelta(minutes=int(m.group(1)))),
@@ -184,28 +184,31 @@ def create_whatsapp_form_message(stage: str, name: str = "") -> str:
     """Crea mensajes estructurados con formularios para WhatsApp"""
     
     if stage == "initial":
-        return f"""📢 ¡Hola {name}! Soy ANA de AVANZA, especialistas en préstamos por libranza para el magisterio y jubilados 💼
+        return f"""🎧 ¡Hola {name}! Soy ANA de AVANZA 💼
 
-¡Aquí sí prestamos aunque estés reportado en centrales! Tenemos tasas desde solo 1,6% mensual y montos hasta $150 millones 💰
+No te estoy escribiendo para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, que es algo que todos necesitamos hoy en día.
 
-Esta puede ser tu oportunidad para liberarte de deudas o recibir dinero extra sin enredos.
+📌 Tenemos tasas desde solo **1.6% mensual** por libranza
+📌 Montos hasta $150 millones sin codeudor
+📌 Sin importar si estás reportado en centrales
+📌 Descuento directo de nómina
 
-¿Te puedo llamar ya mismo para explicártelo en 2 minuticos? Di que sí y empezamos a mejorar tu salud financiera hoy mismo 🟢💪
+¿Te puedo llamar inmediatamente para explicártelo? No es una llamada comercial, es una charla entre tú y yo buscando la mejor forma de que el dinero te rinda más sin estrés.
 
 Responde con:
 ✅ "Sí, llámame" - Te llamo ahora mismo
 ⏰ "Llámame a las [hora]" - Te llamo cuando quieras
 ❌ "No, gracias" - Para cerrar la conversación
 
-¿Qué prefieres?"""
+¿Qué prefieres? 💰💪"""
 
     elif stage == "waiting_confirmation":
         return f"""🎯 ¡Perfecto {name}! 
 
-Para agendar tu llamada y revisar tu elegibilidad para el préstamo, dime cuándo te parece mejor:
+Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime cuándo te parece mejor:
 
 ⏰ Opciones:
-• "Ahora mismo" - Te llamo en 5 minutos
+• "Ahora mismo" - Te llamo en 10 minutos
 • "En 2 horas" - Te llamo en 2 horas  
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
@@ -217,8 +220,9 @@ Para agendar tu llamada y revisar tu elegibilidad para el préstamo, dime cuánd
 
 Tu llamada está programada. Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo AVANZA.
 
-📋 En la llamada revisaremos:
+📋 En la llamada de 10 minutos revisaremos:
 • Tu situación actual y capacidad de pago
+• Cómo podemos bajarte esa cuota que te tiene apretado
 • Monto que puedes obtener (hasta $150 millones)
 • Documentación necesaria (solo cédula vigente)
 • Proceso de desembolso (24-48 horas)
@@ -495,11 +499,29 @@ def get_conversations_status():
 async def twilio_voice(request: Request):
     response = VoiceResponse()
     
-    # Generar saludo personalizado con ElevenLabs
+    # Obtener el número del usuario
+    form = await request.form()
+    from_number = form.get('From', '')
+    
+    if from_number.startswith('whatsapp:'):
+        user_number = from_number.replace('whatsapp:', '').strip()
+    else:
+        user_number = from_number.strip()
+    
+    if not user_number.startswith('+'):
+        user_number = '+' + user_number
+    
+    # Cargar estado de conversación para obtener el nombre
+    state = load_conversation_state(user_number)
+    user_name = state.get("name", "mi cielo")
+    
+    # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
     greeting_text = (
-        "Hola, soy Ana de AVANZA. Vi que te interesaste en nuestro préstamo especial para el magisterio y jubilados. "
-        "Me gustaría saber un poco más sobre tu situación para ayudarte mejor. "
-        "¿Podrías contarme para qué te gustaría usar el préstamo o si tienes alguna deuda que te gustaría consolidar?"
+        f"¡Alóoo, {user_name}! ¿Cómo estás, mi cielo? ¡Qué alegría saludarte! "
+        f"Soy Ana, tu asesora financiera de AVANZA, y antes que nada, gracias por responder nuestro mensajito. "
+        f"Hoy no te estoy llamando para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, "
+        f"que es algo que todos necesitamos hoy en día, ¿verdad? ¿Te agarré en un momento tranquilo? "
+        f"Esto no toma más de 10 minuticos, pero créeme: pueden cambiar tu año."
     )
     greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
     
@@ -511,9 +533,11 @@ async def twilio_voice(request: Request):
     else:
         print("Error generando saludo, usando fallback")
         response.say(
-            "Hola, soy Ana de AVANZA. Vi que te interesaste en nuestro préstamo especial para el magisterio y jubilados. "
-            "Me gustaría saber un poco más sobre tu situación para ayudarte mejor. "
-            "¿Podrías contarme para qué te gustaría usar el préstamo o si tienes alguna deuda que te gustaría consolidar?",
+            f"¡Alóoo, {user_name}! ¿Cómo estás, mi cielo? ¡Qué alegría saludarte! "
+            "Soy Ana, tu asesora financiera de AVANZA, y antes que nada, gracias por responder nuestro mensajito. "
+            "Hoy no te estoy llamando para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, "
+            "que es algo que todos necesitamos hoy en día, ¿verdad? ¿Te agarré en un momento tranquilo? "
+            "Esto no toma más de 10 minuticos, pero créeme: pueden cambiar tu año.",
             language="es-ES"
         )
     
@@ -656,7 +680,7 @@ async def whatsapp_webhook(request: Request):
 Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime cuándo te parece mejor:
 
 ⏰ Opciones:
-• "Ahora mismo" - Te llamo en 5 minutos
+• "Ahora mismo" - Te llamo inmediatamente
 • "En 2 horas" - Te llamo en 2 horas  
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
@@ -714,10 +738,11 @@ Para ayudarte mejor, necesito que me digas específicamente:
                 if any(word in user_response.lower() for word in ["ahora", "ya", "inmediatamente", "ahorita", "ahora mismo"]):
                     ai_reply = f"""🚀 ¡Perfecto {state['name']}! 
 
-Te llamaré en 5 minutos para explicarte todos los detalles del préstamo AVANZA.
+Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVANZA.
 
-📋 En la llamada revisaremos:
+📋 En la llamada de 10 minutos revisaremos:
 • Tu situación actual y capacidad de pago
+• Cómo podemos bajarte esa cuota que te tiene apretado
 • Monto que puedes obtener (hasta $150 millones)
 • Documentación necesaria (solo cédula vigente)
 • Proceso de desembolso (24-48 horas)
@@ -738,7 +763,7 @@ Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarl
                 ai_reply = f"""💡 Entiendo {state['name']}. 
 
 Para agendar tu llamada y revisar tu elegibilidad, dime específicamente:
-• "Ahora mismo" - Te llamo en 5 minutos
+• "Ahora mismo" - Te llamo inmediatamente
 • "En 2 horas" - Te llamo en 2 horas
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
