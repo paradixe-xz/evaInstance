@@ -195,11 +195,6 @@ No te estoy escribiendo para venderte un crédito —te lo prometo—, sino para
 
 ¿Puedo llamarte para explicártelo? No es una llamada comercial, es una charla entre tú y yo buscando la mejor forma de que el dinero te rinda más sin estrés.
 
-Responde con:
-✅ "Sí" - Te llamo inmediatamente
-❌ "No" - Para escoger otra hora
-⏰ "Llámame a las [hora]" - Te llamo cuando quieras
-
 ¿Qué prefieres? 💰💪"""
 
     elif stage == "waiting_confirmation":
