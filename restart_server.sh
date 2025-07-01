@@ -28,6 +28,7 @@ sleep 3
 if pgrep -f "main.py" > /dev/null; then
     echo "✅ Servidor iniciado correctamente"
     echo "📱 Webhook de WhatsApp actualizado con lógica mejorada:"
+    echo "   - Pregunta: '¿Puedo llamarte?'"
     echo "   - Si dice 'SÍ' → Llamada inmediata (1 minuto)"
     echo "   - Si dice 'NO' → Permite escoger hora"
     echo "   - Usa el nombre de la persona en la llamada"

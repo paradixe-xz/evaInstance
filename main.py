@@ -193,12 +193,12 @@ No te estoy escribiendo para venderte un crédito —te lo prometo—, sino para
 📌 Sin importar si estás reportado en centrales
 📌 Descuento directo de nómina
 
-¿Te puedo llamar inmediatamente para explicártelo? No es una llamada comercial, es una charla entre tú y yo buscando la mejor forma de que el dinero te rinda más sin estrés.
+¿Puedo llamarte para explicártelo? No es una llamada comercial, es una charla entre tú y yo buscando la mejor forma de que el dinero te rinda más sin estrés.
 
 Responde con:
-✅ "Sí, llámame" - Te llamo ahora mismo
+✅ "Sí" - Te llamo inmediatamente
+❌ "No" - Para escoger otra hora
 ⏰ "Llámame a las [hora]" - Te llamo cuando quieras
-❌ "No, gracias" - Para cerrar la conversación
 
 ¿Qué prefieres? 💰💪"""
 
@@ -672,7 +672,7 @@ async def whatsapp_webhook(request: Request):
         
         if state["stage"] == "initial":
             # Primera interacción - procesar respuesta inicial
-            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo", "ya", "inmediatamente", "ahorita", "perfecto", "dale", "vamos"]):
+            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo", "ya", "inmediatamente", "ahorita", "perfecto", "dale", "vamos", "puedes", "adelante"]):
                 # Usuario quiere que lo llame ahora - llamar inmediatamente
                 print(f"¡Usuario {state['name']} dice que SÍ! Programando llamada inmediata...")
                 scheduled_time = get_current_time() + timedelta(minutes=1)
@@ -696,7 +696,7 @@ Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVAN
 
 ¡Prepárate para mejorar tu salud financiera! 💰💪📞"""
                 
-            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar", "no ahora", "después", "más tarde"]):
+            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar", "no ahora", "después", "más tarde", "ahora no", "no puedo"]):
                 # Usuario no quiere llamada ahora - permitir escoger hora
                 state["stage"] = "waiting_confirmation"
                 ai_reply = f"""Entiendo {state['name']}. 
@@ -708,6 +708,7 @@ Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVAN
 • "En 2 horas" - Te llamo en 2 horas  
 • "A las 3:30 PM" - Te llamo a esa hora
 • "Mañana a las 10:00" - Te llamo mañana
+• "No, gracias" - Para cerrar la conversación
 
 ¿Cuándo te parece mejor? 💰"""
                 
@@ -735,9 +736,9 @@ Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora"
 
 Para ayudarte mejor, necesito que me digas específicamente:
 
-✅ "Sí, llámame" - Para que te llame inmediatamente
-⏰ "No ahora" - Para escoger otra hora
-❌ "No, gracias" - Para cerrar la conversación
+✅ "Sí" - Para que te llame inmediatamente
+❌ "No" - Para escoger otra hora
+⏰ "Llámame a las [hora]" - Para programar una llamada
 
 ¿Qué prefieres?"""
         
