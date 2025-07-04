@@ -75,19 +75,21 @@ if [ -z "$ELEVENLABS_API_KEY" ]; then
   MISSING_VARS+=("ELEVENLABS_API_KEY")
 fi
 
-# Verificar que el modelo ANA existe
-echo "🤖 Verificando modelo ANA..."
-if ! ollama list | grep -q "ana"; then
-  echo "⚠️  ADVERTENCIA: Modelo 'ana' no encontrado"
-  echo "   Creando modelo ANA..."
-  ollama create ana --from llama2
+# Verificar y actualizar el modelo ANA
+echo "🤖 Verificando y actualizando modelo ANA..."
+if [ -f "update_ana_phone_system.sh" ]; then
+  echo "🔄 Actualizando modelo ANA para llamadas telefónicas..."
+  chmod +x update_ana_phone_system.sh
+  ./update_ana_phone_system.sh
   if [ $? -eq 0 ]; then
-    echo "✅ Modelo ANA creado exitosamente"
+    echo "✅ Modelo ANA actualizado exitosamente"
   else
-    echo "❌ Error creando modelo ANA"
+    echo "⚠️  Error actualizando modelo ANA, intentando crear básico..."
+    ollama create ana --from llama2
   fi
 else
-  echo "✅ Modelo ANA encontrado"
+  echo "⚠️  Script de actualización no encontrado, creando modelo básico..."
+  ollama create ana --from llama2
 fi
 
 # Función para limpiar procesos al salir

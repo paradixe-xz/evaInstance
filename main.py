@@ -327,13 +327,23 @@ def generate_speech_elevenlabs(text, output_file):
         )
         
         # Guardar temporalmente - el audio es un generador, necesitamos iterarlo
-        temp_file = output_file + ".temp.wav"
+        temp_file = output_file + ".temp.mp3"  # Cambiar a .mp3 ya que ElevenLabs puede devolver MP3
         with open(temp_file, "wb") as f:
             for chunk in audio:
                 f.write(chunk)
         
+        try:
+            # Intentar cargar como MP3 primero
+            audio_segment = AudioSegment.from_mp3(temp_file)
+        except:
+            try:
+                # Si falla, intentar como WAV
+                audio_segment = AudioSegment.from_wav(temp_file)
+            except:
+                # Si ambos fallan, intentar detectar automáticamente
+                audio_segment = AudioSegment.from_file(temp_file)
+        
         # Convertir a WAV 8kHz mono para Twilio
-        audio_segment = AudioSegment.from_wav(temp_file)
         audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
         audio_segment.export(output_file, format="wav")
         
@@ -344,6 +354,10 @@ def generate_speech_elevenlabs(text, output_file):
         
     except Exception as e:
         print(f"Error generando audio con ElevenLabs: {e}")
+        # Limpiar archivo temporal si existe
+        temp_file = output_file + ".temp.mp3"
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         return False
 
 # --- Endpoints principales ---
