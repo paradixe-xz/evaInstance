@@ -15,7 +15,7 @@ rm -f audio/*.temp.* 2>/dev/null
 
 # Verificar que los cambios están aplicados
 echo "✅ Verificando cambios aplicados..."
-if grep -q "Generando saludo personalizado ANTES de la llamada" main.py; then
+if grep -q "Generando saludo personalizado para" main.py; then
     echo "✅ Función schedule_call actualizada"
 else
     echo "❌ Error: Cambios no aplicados en schedule_call"
