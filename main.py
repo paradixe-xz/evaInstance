@@ -54,6 +54,14 @@ scheduler.start()
 conversations_dir = "conversations"
 os.makedirs(conversations_dir, exist_ok=True)
 
+# Directorio para transcripciones de llamadas
+transcripts_dir = "transcripts"
+os.makedirs(transcripts_dir, exist_ok=True)
+
+# Directorio para análisis de IA
+analysis_dir = "analysis"
+os.makedirs(analysis_dir, exist_ok=True)
+
 # Crea el directorio de audios si no existe
 audio_dir = "audio"
 os.makedirs(audio_dir, exist_ok=True)
@@ -67,6 +75,14 @@ def get_conversation_file(number: str) -> str:
     """Obtiene la ruta del archivo de conversación para un número"""
     return os.path.join(conversations_dir, f"conversation-{number}.json")
 
+def get_transcript_file(number: str) -> str:
+    """Obtiene la ruta del archivo de transcripción para un número"""
+    return os.path.join(transcripts_dir, f"transcript-{number}.json")
+
+def get_analysis_file(number: str) -> str:
+    """Obtiene la ruta del archivo de análisis para un número"""
+    return os.path.join(analysis_dir, f"analysis-{number}.json")
+
 def load_conversation_state(number: str) -> Dict[str, Any]:
     """Carga el estado de la conversación de un usuario"""
     file_path = get_conversation_file(number)
@@ -79,10 +95,23 @@ def load_conversation_state(number: str) -> Dict[str, Any]:
     
     # Estado inicial por defecto
     return {
-        "stage": "initial",  # initial, waiting_confirmation, scheduled_call, completed
+        "stage": "initial",  # initial, call_in_progress, call_completed, analyzed, ready_for_human
         "name": "",
-        "scheduled_time": None,
         "call_scheduled": False,
+        "call_started": False,
+        "call_completed": False,
+        "call_duration": 0,
+        "transcript_ready": False,
+        "analysis_ready": False,
+        "call_status": "pending",  # pending, in_progress, completed, failed
+        "ai_analysis": {
+            "interest_level": "unknown",  # high, medium, low, none
+            "objections": [],
+            "key_points": [],
+            "next_action": "unknown",
+            "human_followup_needed": False,
+            "priority": "normal"  # high, normal, low
+        },
         "last_interaction": datetime.now(TIMEZONE).isoformat(),
         "messages_sent": 0
     }
@@ -96,89 +125,144 @@ def save_conversation_state(number: str, state: Dict[str, Any]):
     except Exception as e:
         print(f"Error guardando conversación para {number}: {e}")
 
+def save_transcript(number: str, transcript_data: Dict[str, Any]):
+    """Guarda la transcripción de una llamada"""
+    file_path = get_transcript_file(number)
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(transcript_data, f, indent=2, default=str)
+        print(f"Transcripción guardada para {number}")
+    except Exception as e:
+        print(f"Error guardando transcripción para {number}: {e}")
+
+def save_analysis(number: str, analysis_data: Dict[str, Any]):
+    """Guarda el análisis de IA de una llamada"""
+    file_path = get_analysis_file(number)
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(analysis_data, f, indent=2, default=str)
+        print(f"Análisis guardado para {number}")
+    except Exception as e:
+        print(f"Error guardando análisis para {number}: {e}")
+
 def get_current_time() -> datetime:
     """Obtiene la hora actual en Barranquilla"""
     return datetime.now(TIMEZONE)
 
-def parse_time_input(text: str) -> Optional[datetime]:
-    """Parsea texto de tiempo del usuario y retorna datetime"""
-    text = text.lower().strip()
-    current_time = get_current_time()
-    
-    # Patrones comunes de tiempo
-    patterns = [
-        # "ahora", "ya", "inmediatamente", "ahora mismo"
-        (r'\b(ahora|ya|inmediatamente|ahorita|ahora mismo)\b', lambda m: current_time + timedelta(minutes=1)),
+def analyze_call_with_ai(transcript_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Analiza la transcripción de la llamada usando IA para determinar el estado"""
+    try:
+        # Crear prompt para análisis
+        transcript_text = ""
+        for entry in transcript_data.get("conversation", []):
+            role = entry.get("role", "")
+            content = entry.get("content", "")
+            timestamp = entry.get("timestamp", "")
+            transcript_text += f"[{timestamp}] {role}: {content}\n"
         
-        # "en X minutos"
-        (r'en (\d+) minutos?', lambda m: current_time + timedelta(minutes=int(m.group(1)))),
-        
-        # "en X horas"
-        (r'en (\d+) horas?', lambda m: current_time + timedelta(hours=int(m.group(1)))),
-        
-        # "a las X:Y" (formato 24h)
-        (r'a las (\d{1,2}):(\d{2})', lambda m: current_time.replace(
-            hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0
-        )),
-        
-        # "a las X:Y AM/PM" (formato 12h)
-        (r'a las (\d{1,2}):(\d{2})\s*(am|pm)', lambda m: 
-            current_time.replace(
-                hour=int(m.group(1)) + (12 if m.group(3) == 'pm' and int(m.group(1)) != 12 else 0),
-                minute=int(m.group(2)), second=0, microsecond=0
-            )
-        ),
-        
-        # "mañana a las X:Y"
-        (r'mañana a las (\d{1,2}):(\d{2})', lambda m: 
-            (current_time + timedelta(days=1)).replace(
-                hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0
-            )
-        ),
-    ]
-    
-    for pattern, time_func in patterns:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return time_func(match) if callable(time_func) else time_func()
-            except Exception as e:
-                print(f"Error parseando tiempo: {e}")
-                continue
-    
-    return None
+        analysis_prompt = f"""
+Analiza la siguiente transcripción de una llamada de ventas de préstamos por libranza y proporciona un análisis estructurado.
 
-def schedule_call(number: str, scheduled_time: datetime, name: str):
-    """Programa una llamada para un tiempo específico"""
-    job_id = f"call_{number}_{scheduled_time.strftime('%Y%m%d_%H%M%S')}"
-    
-    def make_call():
-        try:
-            print(f"Ejecutando llamada programada para {number} ({name})")
-            call = client.calls.create(
-                to=number,
-                from_=TWILIO_PHONE_NUMBER,
-                url=TWILIO_WEBHOOK_URL
-            )
-            print(f"Llamada iniciada: {call.sid}")
-            
-            # Actualizar estado
-            state = load_conversation_state(number)
-            state["stage"] = "call_in_progress"
-            state["call_sid"] = call.sid
-            save_conversation_state(number, state)
-            
-        except Exception as e:
-            print(f"Error ejecutando llamada programada para {number}: {e}")
-    
-    scheduler.add_job(
-        func=make_call,
-        trigger=DateTrigger(run_date=scheduled_time),
-        id=job_id,
-        replace_existing=True
-    )
-    
-    print(f"Llamada programada para {number} a las {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')}")
+TRANSCRIPCIÓN:
+{transcript_text}
+
+Por favor analiza y responde en formato JSON con los siguientes campos:
+
+{{
+    "interest_level": "high|medium|low|none",
+    "objections": ["lista de objeciones mencionadas"],
+    "key_points": ["puntos clave de la conversación"],
+    "next_action": "schedule_meeting|send_info|follow_up_call|close_deal|no_interest",
+    "human_followup_needed": true/false,
+    "priority": "high|normal|low",
+    "summary": "resumen de 2-3 líneas de la conversación",
+    "recommendations": ["recomendaciones para el seguimiento humano"]
+}}
+
+Criterios de análisis:
+- interest_level: "high" si mostró mucho interés, "medium" si algo de interés, "low" si poco interés, "none" si no mostró interés
+- objections: lista de objeciones o preocupaciones mencionadas
+- key_points: información importante mencionada (situación financiera, necesidades, etc.)
+- next_action: acción recomendada basada en el interés mostrado
+- human_followup_needed: true si necesita seguimiento humano inmediato
+- priority: "high" si es muy interesado, "normal" si es moderado, "low" si no mostró interés
+"""
+
+        # Llamar a Ollama para análisis
+        response = ollama.chat(
+            model='ana',
+            messages=[
+                {
+                    'role': 'system',
+                    'content': 'Eres un analista experto en ventas que analiza transcripciones de llamadas para determinar el nivel de interés y las acciones de seguimiento necesarias.'
+                },
+                {
+                    'role': 'user',
+                    'content': analysis_prompt
+                }
+            ]
+        )
+        
+        # Intentar parsear la respuesta JSON
+        ai_response = response['message']['content']
+        
+        # Buscar JSON en la respuesta
+        json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+        if json_match:
+            analysis = json.loads(json_match.group())
+        else:
+            # Fallback si no se puede parsear JSON
+            analysis = {
+                "interest_level": "unknown",
+                "objections": [],
+                "key_points": [],
+                "next_action": "unknown",
+                "human_followup_needed": False,
+                "priority": "normal",
+                "summary": "Análisis no disponible",
+                "recommendations": ["Revisar transcripción manualmente"]
+            }
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"Error analizando llamada con IA: {e}")
+        return {
+            "interest_level": "unknown",
+            "objections": [],
+            "key_points": [],
+            "next_action": "unknown",
+            "human_followup_needed": False,
+            "priority": "normal",
+            "summary": f"Error en análisis: {str(e)}",
+            "recommendations": ["Revisar transcripción manualmente"]
+        }
+
+def schedule_call(number: str, name: str):
+    """Programa una llamada inmediata para un contacto"""
+    try:
+        print(f"Programando llamada inmediata para {number} ({name})")
+        call = client.calls.create(
+            to=number,
+            from_=TWILIO_PHONE_NUMBER,
+            url=TWILIO_WEBHOOK_URL
+        )
+        print(f"Llamada iniciada: {call.sid}")
+        
+        # Actualizar estado
+        state = load_conversation_state(number)
+        state["stage"] = "call_in_progress"
+        state["call_sid"] = call.sid
+        state["call_started"] = True
+        state["call_status"] = "in_progress"
+        state["name"] = name
+        save_conversation_state(number, state)
+        
+        return call.sid
+        
+    except Exception as e:
+        print(f"Error programando llamada para {number}: {e}")
+        return None
 
 def create_whatsapp_form_message(stage: str, name: str = "") -> str:
     """Crea mensajes estructurados con formularios para WhatsApp"""
@@ -249,53 +333,40 @@ def generate_speech_elevenlabs(text, output_file):
                 f.write(chunk)
         
         # Convertir a WAV 8kHz mono para Twilio
-        audio_segment = AudioSegment.from_file(temp_file)
+        audio_segment = AudioSegment.from_wav(temp_file)
         audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
         audio_segment.export(output_file, format="wav")
         
         # Limpiar archivo temporal
         os.remove(temp_file)
         
-        if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
-            print(f"Audio generado con ElevenLabs: {output_file}")
-            return True
-        else:
-            print("Archivo de audio no se creó correctamente")
-            return False
+        return True
+        
     except Exception as e:
         print(f"Error generando audio con ElevenLabs: {e}")
         return False
 
+# --- Endpoints principales ---
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
+    return {"message": "Sistema ANA - Llamadas automáticas con análisis de IA"}
 
 @app.get("/test-tts")
 def test_tts():
-    """Endpoint para probar el TTS"""
-    test_text = "Hola, esto es una prueba del sistema de voz con ElevenLabs."
-    audio_filename = f"audio/test_{uuid.uuid4()}.wav"
+    """Endpoint de prueba para TTS"""
+    test_text = "Hola, soy Ana tu asesora financiera de AVANZA. ¿Cómo estás?"
+    test_filename = f"audio/test_{uuid.uuid4()}.wav"
     
-    print(f"Probando ElevenLabs TTS con texto: {test_text}")
-    
-    if generate_speech_elevenlabs(test_text, audio_filename):
-        audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
+    if generate_speech_elevenlabs(test_text, test_filename):
         return {
-            "success": True,
-            "message": "ElevenLabs TTS funcionando correctamente",
-            "audio_url": audio_url,
-            "voice_id": ELEVENLABS_VOICE_ID,
-            "text": test_text
+            "status": "success",
+            "message": "Audio generado exitosamente",
+            "file": test_filename,
+            "url": f"{PUBLIC_BASE_URL}/audio/{os.path.basename(test_filename)}"
         }
     else:
-        return {
-            "success": False,
-            "message": "Error en ElevenLabs TTS",
-            "voice_id": ELEVENLABS_VOICE_ID,
-            "text": test_text
-        }
+        return {"status": "error", "message": "Error generando audio"}
 
-# --- Endpoint para crear representante (original) ---
 class CreateRepresentativeRequest(BaseModel):
     model_name: str
     from_model: str
@@ -305,180 +376,82 @@ class CreateRepresentativeRequest(BaseModel):
 
 @app.post("/createRepresentative")
 def create_representative(req: CreateRepresentativeRequest):
-    models_dir = "models"
-    os.makedirs(models_dir, exist_ok=True)
-    modelfile_path = os.path.join(models_dir, f"{req.model_name}.Modelfile")
+    """Crea un nuevo modelo representante usando Ollama"""
     try:
-        with open(modelfile_path, "w") as f:
-            f.write(f"FROM {req.from_model}\n\n")
-            f.write(f"PARAMETER temperature {req.temperature}\n")
-            f.write(f"PARAMETER num_ctx {req.num_ctx}\n\n")
-            f.write(f'SYSTEM """\n{req.system_prompt}\n"""\n')
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating Modelfile: {e}")
-
-    # Run ollama create command
-    try:
-        result = subprocess.run(
-            ["ollama", "create", req.model_name, "-f", modelfile_path],
-            capture_output=True, text=True, check=True
-        )
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"Error running ollama create: {e.stderr}")
-
-    return {"message": f"Representative '{req.model_name}' created successfully.", "output": result.stdout}
-
-# --- Nuevo endpoint para recibir archivo Excel con nombres y números ---
-@app.post("/sendNumbers")
-async def send_numbers(file: UploadFile = File(...)):
-    print(f"Archivo recibido: {file.filename}")
-    
-    # Validar que sea un archivo Excel
-    if not file.filename.lower().endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos Excel (.xlsx, .xls)")
-    
-    try:
-        # Leer el contenido del archivo
-        content = await file.read()
+        # Leer el prompt del sistema desde archivo
+        system_prompt_path = "system_prompt_updated.txt"
+        if os.path.exists(system_prompt_path):
+            with open(system_prompt_path, 'r', encoding='utf-8') as f:
+                system_prompt = f.read()
+        else:
+            system_prompt = req.system_prompt
         
-        # Procesar el archivo Excel
-        try:
-            df = pd.read_excel(io.BytesIO(content))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error leyendo el archivo Excel: {str(e)}")
+        # Crear el modelo usando Ollama
+        create_command = [
+            "ollama", "create", req.model_name,
+            "--from", req.from_model,
+            "--modelfile", f"""
+FROM {req.from_model}
+PARAMETER temperature {req.temperature}
+PARAMETER num_ctx {req.num_ctx}
+SYSTEM {system_prompt}
+"""
+        ]
         
-        # Validar que tenga las columnas necesarias
-        required_columns = ['nombre', 'numero']
-        missing_columns = [col for col in required_columns if col.lower() not in [col.lower() for col in df.columns]]
+        result = subprocess.run(create_command, capture_output=True, text=True)
         
-        if missing_columns:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"El archivo debe contener las columnas: {', '.join(required_columns)}. Columnas faltantes: {', '.join(missing_columns)}"
-            )
-        
-        # Normalizar nombres de columnas
-        df.columns = df.columns.str.lower()
-        
-        # Limpiar datos
-        df = df.dropna(subset=['numero'])  # Eliminar filas sin número
-        df['numero'] = df['numero'].astype(str).str.strip()
-        
-        # Validar números de teléfono
-        valid_numbers = []
-        invalid_numbers = []
-        
-        for index, row in df.iterrows():
-            number = row['numero']
-            name = row.get('nombre', 'Sin nombre')
+        if result.returncode == 0:
+            return {
+                "status": "success",
+                "message": f"Modelo {req.model_name} creado exitosamente",
+                "details": result.stdout
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Error creando modelo: {result.stderr}",
+                "details": result.stdout
+            }
             
-            # Limpiar número (remover espacios, guiones, etc.)
-            clean_number = ''.join(filter(str.isdigit, number))
-            
-            # Validar formato básico
-            if len(clean_number) >= 10:
-                # Agregar + si no tiene
-                if not clean_number.startswith('+'):
-                    clean_number = '+' + clean_number
-                valid_numbers.append({
-                    'name': name,
-                    'number': clean_number,
-                    'original_number': number
-                })
-            else:
-                invalid_numbers.append({
-                    'name': name,
-                    'number': number,
-                    'row': index + 2  # +2 porque Excel empieza en 1 y tenemos header
-                })
-        
-        if not valid_numbers:
-            raise HTTPException(status_code=400, detail="No se encontraron números de teléfono válidos en el archivo")
-        
-        # Procesar números válidos
-        results = []
-        for contact in valid_numbers:
-            try:
-                # Inicializar estado de conversación
-                state = load_conversation_state(contact['number'])
-                state["name"] = contact['name']
-                state["stage"] = "initial"
-                state["last_interaction"] = get_current_time().isoformat()
-                save_conversation_state(contact['number'], state)
-                
-                # Enviar mensaje inicial de WhatsApp con formulario
-                initial_message = create_whatsapp_form_message("initial", contact['name'])
-                whatsapp_message = client.messages.create(
-                    body=initial_message,
-                    from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
-                    to="whatsapp:" + contact['number']
-                )
-                
-                results.append({
-                    "name": contact['name'],
-                    "to": contact['number'],
-                    "whatsapp_sid": whatsapp_message.sid,
-                    "status": "initial_message_sent",
-                    "message": "Mensaje inicial enviado - esperando confirmación del usuario"
-                })
-                
-            except Exception as e:
-                results.append({
-                    "name": contact['name'],
-                    "to": contact['number'],
-                    "error": str(e),
-                    "status": "error"
-                })
-        
-        return {
-            "message": f"Procesamiento completado. {len(valid_numbers)} contactos válidos encontrados.",
-            "total_contacts": len(df),
-            "valid_contacts": len(valid_numbers),
-            "invalid_contacts": len(invalid_numbers),
-            "results": results,
-            "invalid_numbers": invalid_numbers
-        }
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando el archivo: {str(e)}")
+        return {"status": "error", "message": f"Error: {str(e)}"}
 
 @app.get("/conversations/status")
 def get_conversations_status():
-    """Endpoint para ver el estado de todas las conversaciones"""
+    """Obtiene el estado de todas las conversaciones"""
     try:
         conversations = []
         current_time = get_current_time()
         
-        for filename in os.listdir(conversations_dir):
-            if filename.startswith("conversation-") and filename.endswith(".json"):
-                number = filename.replace("conversation-", "").replace(".json", "")
-                
-                try:
-                    with open(os.path.join(conversations_dir, filename), 'r', encoding='utf-8') as f:
-                        state = json.load(f)
+        if os.path.exists(conversations_dir):
+            for filename in os.listdir(conversations_dir):
+                if filename.startswith("conversation-") and filename.endswith(".json"):
+                    number = filename.replace("conversation-", "").replace(".json", "")
                     
-                    # Calcular tiempo desde última interacción
-                    last_interaction = datetime.fromisoformat(state.get("last_interaction", current_time.isoformat()))
-                    time_diff = current_time - last_interaction.replace(tzinfo=TIMEZONE)
-                    
-                    conversations.append({
-                        "number": number,
-                        "name": state.get("name", "Sin nombre"),
-                        "stage": state.get("stage", "unknown"),
-                        "messages_sent": state.get("messages_sent", 0),
-                        "call_scheduled": state.get("call_scheduled", False),
-                        "scheduled_time": state.get("scheduled_time"),
-                        "last_interaction": state.get("last_interaction"),
-                        "time_since_last_interaction": str(time_diff).split('.')[0] if time_diff.total_seconds() > 0 else "Ahora mismo"
-                    })
-                except Exception as e:
-                    print(f"Error leyendo conversación {filename}: {e}")
-                    continue
-        
-        # Ordenar por última interacción (más reciente primero)
-        conversations.sort(key=lambda x: x["last_interaction"], reverse=True)
+                    try:
+                        with open(os.path.join(conversations_dir, filename), 'r', encoding='utf-8') as f:
+                            state = json.load(f)
+                        
+                        # Calcular tiempo desde última interacción
+                        last_interaction = datetime.fromisoformat(state.get("last_interaction", current_time.isoformat()))
+                        time_diff = current_time - last_interaction.replace(tzinfo=TIMEZONE)
+                        
+                        conversations.append({
+                            "number": number,
+                            "name": state.get("name", ""),
+                            "stage": state.get("stage", "unknown"),
+                            "call_status": state.get("call_status", "unknown"),
+                            "call_duration": state.get("call_duration", 0),
+                            "transcript_ready": state.get("transcript_ready", False),
+                            "analysis_ready": state.get("analysis_ready", False),
+                            "ai_analysis": state.get("ai_analysis", {}),
+                            "messages_sent": state.get("messages_sent", 0),
+                            "last_interaction": state.get("last_interaction", ""),
+                            "time_since_last_interaction": str(time_diff).split('.')[0]
+                        })
+                    except Exception as e:
+                        print(f"Error procesando conversación {filename}: {e}")
+                        continue
         
         return {
             "total_conversations": len(conversations),
@@ -488,15 +461,17 @@ def get_conversations_status():
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estado de conversaciones: {str(e)}")
+        return {"error": f"Error obteniendo estado: {str(e)}"}
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
+    """Maneja llamadas entrantes de Twilio"""
     response = VoiceResponse()
     
     # Obtener el número del usuario
     form = await request.form()
     from_number = form.get('From', '')
+    call_sid = form.get('CallSid', '')
     
     if from_number.startswith('whatsapp:'):
         user_number = from_number.replace('whatsapp:', '').strip()
@@ -510,13 +485,26 @@ async def twilio_voice(request: Request):
     state = load_conversation_state(user_number)
     user_name = state.get("name", "mi cielo")
     
+    # Inicializar transcripción si no existe
+    if not state.get("transcript_ready", False):
+        transcript_data = {
+            "call_sid": call_sid,
+            "number": user_number,
+            "name": user_name,
+            "start_time": get_current_time().isoformat(),
+            "conversation": []
+        }
+        save_transcript(user_number, transcript_data)
+        state["transcript_ready"] = True
+        save_conversation_state(user_number, state)
+    
     # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
     greeting_text = (
-        f"¡Alóoo, {user_name}! ¿Cómo estás, mi cielo? ¡Qué alegría saludarte! "
-        f"Soy Ana, tu asesora financiera de AVANZA, y antes que nada, gracias por responder nuestro mensajito. "
-        f"Hoy no te estoy llamando para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, "
-        f"que es algo que todos necesitamos hoy en día, ¿verdad? ¿Te agarré en un momento tranquilo? "
-        f"Esto no toma más de 10 minuticos, pero créeme: pueden cambiar tu año."
+        f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+        f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+        f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+        f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+        f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
     )
     greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
     
@@ -528,13 +516,29 @@ async def twilio_voice(request: Request):
     else:
         print("Error generando saludo, usando fallback")
         response.say(
-            f"¡Alóoo, {user_name}! ¿Cómo estás, mi cielo? ¡Qué alegría saludarte! "
-            "Soy Ana, tu asesora financiera de AVANZA, y antes que nada, gracias por responder nuestro mensajito. "
-            "Hoy no te estoy llamando para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, "
-            "que es algo que todos necesitamos hoy en día, ¿verdad? ¿Te agarré en un momento tranquilo? "
-            "Esto no toma más de 10 minuticos, pero créeme: pueden cambiar tu año.",
+            f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+            "Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+            "Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+            "que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+            "Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año.",
             language="es-ES"
         )
+    
+    # Guardar saludo en transcripción
+    transcript_data = {
+        "call_sid": call_sid,
+        "number": user_number,
+        "name": user_name,
+        "start_time": get_current_time().isoformat(),
+        "conversation": [
+            {
+                "role": "assistant",
+                "content": greeting_text,
+                "timestamp": get_current_time().isoformat()
+            }
+        ]
+    }
+    save_transcript(user_number, transcript_data)
     
     response.gather(
         input="speech",
@@ -544,6 +548,7 @@ async def twilio_voice(request: Request):
         timeout=7,
         speechTimeout="auto"
     )
+    
     # Generar despedida personalizada con ElevenLabs
     goodbye_text = "No se detectó audio. Ha sido un placer hablar contigo. ¡Que tengas un excelente día!"
     goodbye_filename = f"audio/goodbye_{uuid.uuid4()}.wav"
@@ -553,37 +558,81 @@ async def twilio_voice(request: Request):
         response.play(goodbye_url)
     else:
         response.say("No se detectó audio. Adiós.", language="es-ES")
+    
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
 
 @app.post("/twilio/voice/handle_speech")
 async def handle_speech(request: Request):
+    """Maneja el reconocimiento de voz durante las llamadas"""
     form = await request.form()
     speech_result = form.get('SpeechResult', '').strip()
     from_number = form.get('From', '')
+    call_sid = form.get('CallSid', '')
+    
     print(f"SpeechResult: {speech_result}")
     print(f"From: {from_number}")
+    
     user_number = from_number.replace('whatsapp:', '').strip()
     if not user_number.startswith('+'):
         user_number = '+' + user_number
-    history = load_history(user_number)
-    append_to_history(user_number, 'user', speech_result)
-    history.append({'role': 'user', 'content': speech_result})
+    
+    # Cargar transcripción actual
+    transcript_file = get_transcript_file(user_number)
+    if os.path.exists(transcript_file):
+        with open(transcript_file, 'r', encoding='utf-8') as f:
+            transcript_data = json.load(f)
+    else:
+        transcript_data = {
+            "call_sid": call_sid,
+            "number": user_number,
+            "name": "",
+            "start_time": get_current_time().isoformat(),
+            "conversation": []
+        }
+    
+    # Agregar respuesta del usuario a la transcripción
+    transcript_data["conversation"].append({
+        "role": "user",
+        "content": speech_result,
+        "timestamp": get_current_time().isoformat()
+    })
+    
+    # Generar respuesta de IA
     try:
+        # Crear historial de conversación para IA
+        history = []
+        for entry in transcript_data["conversation"]:
+            history.append({
+                'role': entry['role'],
+                'content': entry['content']
+            })
+        
         response_ia = ollama.chat(
             model='ana',
             messages=history
         )
         ai_reply = response_ia['message']['content']
+        
     except Exception as e:
         print("Error llamando a ollama:", e)
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
-    append_to_history(user_number, 'assistant', ai_reply)
+    
+    # Agregar respuesta de IA a la transcripción
+    transcript_data["conversation"].append({
+        "role": "assistant",
+        "content": ai_reply,
+        "timestamp": get_current_time().isoformat()
+    })
+    
+    # Guardar transcripción actualizada
+    save_transcript(user_number, transcript_data)
     
     # Usar ElevenLabs TTS
     audio_filename = f"audio/response_{uuid.uuid4()}.wav"
     response = VoiceResponse()
     print(f"Generando audio para: {ai_reply[:50]}...")
+    
     if generate_speech_elevenlabs(ai_reply, audio_filename):
         audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
         print(f"Audio generado exitosamente: {audio_url}")
@@ -591,6 +640,7 @@ async def handle_speech(request: Request):
     else:
         print("Error generando audio, usando fallback")
         response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
+    
     # Gather después del play
     response.gather(
         input="speech",
@@ -600,6 +650,7 @@ async def handle_speech(request: Request):
         timeout=10,
         speechTimeout="auto"
     )
+    
     # Generar despedida personalizada con ElevenLabs
     goodbye_text = "No se detectó audio. Ha sido un placer hablar contigo. ¡Que tengas un excelente día!"
     goodbye_filename = f"audio/goodbye_{uuid.uuid4()}.wav"
@@ -609,8 +660,64 @@ async def handle_speech(request: Request):
         response.play(goodbye_url)
     else:
         response.say("No se detectó audio. Adiós.", language="es-ES")
+    
     response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
+
+@app.post("/twilio/voice/call_ended")
+async def call_ended(request: Request):
+    """Maneja el final de las llamadas y analiza la transcripción"""
+    form = await request.form()
+    call_sid = form.get('CallSid', '')
+    from_number = form.get('From', '')
+    call_duration = form.get('CallDuration', '0')
+    
+    user_number = from_number.replace('whatsapp:', '').strip()
+    if not user_number.startswith('+'):
+        user_number = '+' + user_number
+    
+    print(f"Llamada terminada para {user_number}, duración: {call_duration} segundos")
+    
+    # Actualizar estado de la conversación
+    state = load_conversation_state(user_number)
+    state["call_completed"] = True
+    state["call_duration"] = int(call_duration)
+    state["call_status"] = "completed"
+    state["stage"] = "call_completed"
+    save_conversation_state(user_number, state)
+    
+    # Cargar transcripción
+    transcript_file = get_transcript_file(user_number)
+    if os.path.exists(transcript_file):
+        with open(transcript_file, 'r', encoding='utf-8') as f:
+            transcript_data = json.load(f)
+        
+        # Agregar información de finalización
+        transcript_data["end_time"] = get_current_time().isoformat()
+        transcript_data["call_duration"] = int(call_duration)
+        save_transcript(user_number, transcript_data)
+        
+        # Analizar transcripción con IA
+        print(f"Analizando transcripción para {user_number}...")
+        analysis = analyze_call_with_ai(transcript_data)
+        
+        # Guardar análisis
+        save_analysis(user_number, analysis)
+        
+        # Actualizar estado con análisis
+        state["analysis_ready"] = True
+        state["ai_analysis"] = analysis
+        state["stage"] = "analyzed"
+        
+        # Determinar si necesita seguimiento humano
+        if analysis.get("human_followup_needed", False) or analysis.get("interest_level") in ["high", "medium"]:
+            state["stage"] = "ready_for_human"
+        
+        save_conversation_state(user_number, state)
+        
+        print(f"Análisis completado para {user_number}: {analysis.get('interest_level', 'unknown')} interés")
+    
+    return PlainTextResponse("OK")
 
 # --- Historial de chat por usuario (archivo) ---
 def get_chatlog_path(number):
@@ -635,187 +742,167 @@ def append_to_history(number, role, content):
     with open(path, 'a', encoding='utf-8') as f:
         f.write(f"{role}:{content}\n")
 
-# --- Endpoint webhook para WhatsApp (Twilio) ---
-@app.post("/twilio/whatsapp")
-async def whatsapp_webhook(request: Request):
-    print("¡Llego un mensaje de WhatsApp!")
+# --- Endpoint para procesar contactos y hacer llamadas directas ---
+@app.post("/sendNumbers")
+async def send_numbers(file: UploadFile = File(...)):
+    """Procesa archivo Excel con contactos y hace llamadas directas"""
     try:
-        form = await request.form()
-        print("Form recibido:", form)
-        from_number = form.get('From', '')
-        body = form.get('Body', '').strip()
-        print("From:", from_number, "Body:", body)
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return {"error": "El archivo debe ser un Excel (.xlsx o .xls)"}
         
-        if from_number.startswith('whatsapp:'):
-            user_number = from_number.replace('whatsapp:', '').strip()
-        else:
-            user_number = from_number.strip()
+        # Leer archivo Excel
+        content = await file.read()
+        df = pd.read_excel(io.BytesIO(content))
         
-        if not user_number.startswith('+'):
-            user_number = '+' + user_number
+        # Validar columnas requeridas
+        required_columns = ['numero']
+        if not all(col in df.columns for col in required_columns):
+            return {"error": f"El archivo debe contener las columnas: {required_columns}"}
         
-        print("User number:", user_number)
+        # Procesar contactos
+        valid_contacts = []
+        invalid_numbers = []
+        results = []
         
-        # Cargar estado de conversación
-        state = load_conversation_state(user_number)
-        state["last_interaction"] = get_current_time().isoformat()
-        state["messages_sent"] += 1
-        
-        # Procesar respuesta según el estado actual
-        user_response = body.lower().strip()
-        ai_reply = ""
-        
-        if state["stage"] == "initial":
-            # Primera interacción - procesar respuesta inicial
-            if any(word in user_response for word in ["sí", "si", "llámame", "llamame", "llama", "ok", "okay", "claro", "ahora mismo", "ya", "inmediatamente", "ahorita", "perfecto", "dale", "vamos", "puedes", "adelante"]):
-                # Usuario quiere que lo llame ahora - llamar inmediatamente
-                print(f"¡Usuario {state['name']} dice que SÍ! Programando llamada inmediata...")
-                scheduled_time = get_current_time() + timedelta(minutes=1)
-                state["stage"] = "scheduled_call"
-                state["scheduled_time"] = scheduled_time.isoformat()
-                state["call_scheduled"] = True
+        for index, row in df.iterrows():
+            try:
+                # Obtener número
+                numero = str(row['numero']).strip()
+                nombre = str(row.get('nombre', '')).strip() if 'nombre' in df.columns else ""
                 
-                # Programar llamada
-                schedule_call(user_number, scheduled_time, state["name"])
+                # Limpiar número
+                numero = re.sub(r'[^\d+]', '', numero)
+                if not numero.startswith('+'):
+                    numero = '+' + numero
                 
-                ai_reply = f"""🚀 ¡Perfecto {state['name']}! 
-
-Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVANZA.
-
-📋 En la llamada de 10 minutos revisaremos:
-• Tu situación actual y capacidad de pago
-• Cómo podemos bajarte esa cuota que te tiene apretado
-• Monto que puedes obtener (hasta $150 millones)
-• Documentación necesaria (solo cédula vigente)
-• Proceso de desembolso (24-48 horas)
-
-¡Prepárate para mejorar tu salud financiera! 💰💪📞"""
+                # Validar número (mínimo 10 dígitos)
+                digits_only = re.sub(r'[^\d]', '', numero)
+                if len(digits_only) < 10:
+                    invalid_numbers.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "error": "Número muy corto"
+                    })
+                    continue
                 
-            elif any(word in user_response for word in ["no", "gracias", "cancelar", "cerrar", "no ahora", "después", "más tarde", "ahora no", "no puedo"]):
-                # Usuario no quiere llamada ahora - permitir escoger hora
-                state["stage"] = "waiting_confirmation"
-                ai_reply = f"""Entiendo {state['name']}. 
-
-¿Cuándo te viene mejor para que te llame?
-
-⏰ Opciones:
-• "Ahora mismo" - Te llamo inmediatamente
-• "En 2 horas" - Te llamo en 2 horas  
-• "A las 3:30 PM" - Te llamo a esa hora
-• "Mañana a las 10:00" - Te llamo mañana
-• "No, gracias" - Para cerrar la conversación
-
-¿Cuándo te parece mejor? 💰"""
+                # Programar llamada inmediata
+                call_sid = schedule_call(numero, nombre)
                 
-            else:
-                # Buscar si menciona una hora específica
-                scheduled_time = parse_time_input(user_response)
-                if scheduled_time:
-                    state["stage"] = "scheduled_call"
-                    state["scheduled_time"] = scheduled_time.isoformat()
-                    state["call_scheduled"] = True
+                if call_sid:
+                    valid_contacts.append({
+                        "numero": numero,
+                        "nombre": nombre,
+                        "call_sid": call_sid
+                    })
                     
-                    # Programar llamada
-                    schedule_call(user_number, scheduled_time, state["name"])
-                    
-                    ai_reply = f"""¡Perfecto {state['name']}! 
-
-Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
-
-Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
-
-¿Hay algo más en lo que pueda ayudarte mientras tanto?"""
+                    results.append({
+                        "numero": numero,
+                        "nombre": nombre,
+                        "status": "llamada_programada",
+                        "call_sid": call_sid
+                    })
                 else:
-                    # Respuesta no reconocida - ser más específico
-                    ai_reply = f"""Entiendo {state['name']}. 
-
-Para ayudarte mejor, necesito que me digas específicamente:
-
-✅ "Sí" - Para que te llame inmediatamente
-❌ "No" - Para escoger otra hora
-⏰ "Llámame a las [hora]" - Para programar una llamada
-
-¿Qué prefieres?"""
-        
-        elif state["stage"] == "waiting_confirmation":
-            # Usuario confirmó que quiere llamada - procesar hora
-            scheduled_time = parse_time_input(user_response)
-            
-            if scheduled_time:
-                state["stage"] = "scheduled_call"
-                state["scheduled_time"] = scheduled_time.isoformat()
-                state["call_scheduled"] = True
+                    invalid_numbers.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "error": "Error programando llamada"
+                    })
                 
-                # Programar llamada
-                schedule_call(user_number, scheduled_time, state["name"])
-                
-                # Si es "ahora mismo", dar respuesta inmediata
-                if any(word in user_response.lower() for word in ["ahora", "ya", "inmediatamente", "ahorita", "ahora mismo"]):
-                    ai_reply = f"""🚀 ¡Perfecto {state['name']}! 
-
-Te llamaré inmediatamente para explicarte todos los detalles del préstamo AVANZA.
-
-📋 En la llamada de 10 minutos revisaremos:
-• Tu situación actual y capacidad de pago
-• Cómo podemos bajarte esa cuota que te tiene apretado
-• Monto que puedes obtener (hasta $150 millones)
-• Documentación necesaria (solo cédula vigente)
-• Proceso de desembolso (24-48 horas)
-
-¡Prepárate para mejorar tu salud financiera! 💰💪📞"""
-                else:
-                    ai_reply = f"""✅ ¡Excelente {state['name']}! 
-
-Tu llamada está programada para el {scheduled_time.strftime('%d/%m/%Y')} a las {scheduled_time.strftime('%H:%M')}.
-
-Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo AVANZA.
-
-Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarla.
-
-¡Prepárate para mejorar tu salud financiera! 💰💪"""
-            else:
-                # Si no reconoce el tiempo, dar opciones más claras
-                ai_reply = f"""💡 Entiendo {state['name']}. 
-
-Para agendar tu llamada y revisar tu elegibilidad, dime específicamente:
-• "Ahora mismo" - Te llamo inmediatamente
-• "En 2 horas" - Te llamo en 2 horas
-• "A las 3:30 PM" - Te llamo a esa hora
-• "Mañana a las 10:00" - Te llamo mañana
-
-¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
+            except Exception as e:
+                invalid_numbers.append({
+                    "row": index + 1,
+                    "numero": str(row.get('numero', '')),
+                    "nombre": str(row.get('nombre', '')),
+                    "error": str(e)
+                })
         
-        elif state["stage"] == "scheduled_call":
-            # Llamada ya programada - verificar si quiere cambiar hora
-            if any(word in user_response for word in ["cambiar", "cambio", "otra hora", "diferente"]):
-                state["stage"] = "waiting_confirmation"
-                ai_reply = create_whatsapp_form_message("waiting_confirmation", state["name"])
-            elif any(word in user_response for word in ["cancelar", "no", "gracias"]):
-                state["stage"] = "completed"
-                ai_reply = "Entendido. He cancelado la llamada programada. ¡Que tengas un excelente día! 😊"
-            else:
-                ai_reply = create_whatsapp_form_message("scheduled_call", state["name"])
-        
-        else:
-            # Estado completado o desconocido
-            ai_reply = "Gracias por tu tiempo. ¡Que tengas un excelente día! 😊"
-        
-        # Guardar estado actualizado
-        save_conversation_state(user_number, state)
-        
-        # Guardar en historial para IA
-        append_to_history(user_number, 'user', body)
-        append_to_history(user_number, 'assistant', ai_reply)
-        
-        # Enviar respuesta
-        client.messages.create(
-            body=ai_reply,
-            from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
-            to="whatsapp:" + user_number
-        )
-        
-        print(f"Respuesta enviada por WhatsApp a {user_number}: {ai_reply[:50]}...")
+        return {
+            "message": f"Procesamiento completado. {len(valid_contacts)} llamadas programadas.",
+            "total_contacts": len(df),
+            "valid_contacts": len(valid_contacts),
+            "invalid_contacts": len(invalid_numbers),
+            "results": results,
+            "invalid_numbers": invalid_numbers
+        }
         
     except Exception as e:
-        print("Error general en el endpoint:", e)
-        return PlainTextResponse("Error interno en el servidor", status_code=500)
+        return {"error": f"Error procesando archivo: {str(e)}"}
+
+# --- Endpoint para obtener análisis listos para seguimiento humano ---
+@app.get("/analysis/ready_for_human")
+def get_ready_for_human():
+    """Obtiene todas las conversaciones listas para seguimiento humano"""
+    try:
+        ready_conversations = []
+        
+        if os.path.exists(conversations_dir):
+            for filename in os.listdir(conversations_dir):
+                if filename.startswith("conversation-") and filename.endswith(".json"):
+                    number = filename.replace("conversation-", "").replace(".json", "")
+                    
+                    try:
+                        with open(os.path.join(conversations_dir, filename), 'r', encoding='utf-8') as f:
+                            state = json.load(f)
+                        
+                        if state.get("stage") == "ready_for_human":
+                            # Cargar transcripción
+                            transcript_file = get_transcript_file(number)
+                            transcript_data = None
+                            if os.path.exists(transcript_file):
+                                with open(transcript_file, 'r', encoding='utf-8') as f:
+                                    transcript_data = json.load(f)
+                            
+                            # Cargar análisis
+                            analysis_file = get_analysis_file(number)
+                            analysis_data = None
+                            if os.path.exists(analysis_file):
+                                with open(analysis_file, 'r', encoding='utf-8') as f:
+                                    analysis_data = json.load(f)
+                            
+                            ready_conversations.append({
+                                "number": number,
+                                "name": state.get("name", ""),
+                                "call_duration": state.get("call_duration", 0),
+                                "ai_analysis": state.get("ai_analysis", {}),
+                                "transcript": transcript_data,
+                                "analysis": analysis_data,
+                                "last_interaction": state.get("last_interaction", "")
+                            })
+                    except Exception as e:
+                        print(f"Error procesando conversación {filename}: {e}")
+                        continue
+        
+        return {
+            "total_ready": len(ready_conversations),
+            "conversations": ready_conversations
+        }
+        
+    except Exception as e:
+        return {"error": f"Error obteniendo conversaciones listas: {str(e)}"}
+
+# --- Endpoint para marcar conversación como cerrada por humano ---
+@app.post("/analysis/mark_closed")
+def mark_conversation_closed(number: str, outcome: str, notes: str = ""):
+    """Marca una conversación como cerrada por un humano"""
+    try:
+        state = load_conversation_state(number)
+        state["stage"] = "closed_by_human"
+        state["human_outcome"] = outcome
+        state["human_notes"] = notes
+        state["closed_at"] = get_current_time().isoformat()
+        save_conversation_state(number, state)
+        
+        return {
+            "status": "success",
+            "message": f"Conversación {number} marcada como cerrada",
+            "outcome": outcome
+        }
+        
+    except Exception as e:
+        return {"error": f"Error marcando conversación: {str(e)}"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
