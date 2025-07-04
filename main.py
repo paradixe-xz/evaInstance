@@ -239,9 +239,32 @@ Criterios de análisis:
         }
 
 def schedule_call(number: str, name: str):
-    """Programa una llamada inmediata para un contacto"""
+    """Programa una llamada inmediata para un contacto y genera el saludo personalizado"""
     try:
         print(f"Programando llamada inmediata para {number} ({name})")
+        
+        # Generar saludo personalizado ANTES de la llamada
+        greeting_text = (
+            f"¡Alóoo {name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
+        )
+        greeting_filename = f"audio/greeting_{number.replace('+', '').replace('-', '')}_{uuid.uuid4()}.wav"
+        
+        print(f"🎤 Generando saludo personalizado para {name}...")
+        if generate_speech_elevenlabs(greeting_text, greeting_filename):
+            greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
+            print(f"✅ Saludo generado: {greeting_url}")
+        else:
+            print("⚠️ Error generando saludo, se usará fallback")
+            greeting_url = None
+        
+        # Crear directorio de audio si no existe
+        os.makedirs("audio", exist_ok=True)
+        
+        # Iniciar la llamada
         call = client.calls.create(
             to=number,
             from_=TWILIO_PHONE_NUMBER,
@@ -249,13 +272,15 @@ def schedule_call(number: str, name: str):
         )
         print(f"Llamada iniciada: {call.sid}")
         
-        # Actualizar estado
+        # Actualizar estado con información del saludo
         state = load_conversation_state(number)
         state["stage"] = "call_in_progress"
         state["call_sid"] = call.sid
         state["call_started"] = True
         state["call_status"] = "in_progress"
         state["name"] = name
+        state["greeting_audio_url"] = greeting_url
+        state["greeting_audio_file"] = greeting_filename
         save_conversation_state(number, state)
         
         return call.sid
@@ -512,31 +537,46 @@ async def twilio_voice(request: Request):
         state["transcript_ready"] = True
         save_conversation_state(user_number, state)
     
-    # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
-    greeting_text = (
-        f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-        f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-        f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-        f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-        f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
-    )
-    greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
+    # Usar saludo pre-generado si existe, sino generar uno nuevo
+    greeting_audio_url = state.get("greeting_audio_url")
+    greeting_audio_file = state.get("greeting_audio_file")
     
-    print("Generando saludo personalizado con ElevenLabs...")
-    if generate_speech_elevenlabs(greeting_text, greeting_filename):
-        greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
-        print(f"Saludo generado exitosamente: {greeting_url}")
-        response.play(greeting_url)
-    else:
-        print("Error generando saludo, usando fallback")
-        response.say(
+    if greeting_audio_url and greeting_audio_file and os.path.exists(greeting_audio_file):
+        print(f"🎤 Usando saludo pre-generado: {greeting_audio_url}")
+        response.play(greeting_audio_url)
+        greeting_text = (
             f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-            "Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-            "Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-            "que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-            "Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año.",
-            language="es-ES"
+            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
         )
+    else:
+        print("⚠️ No se encontró saludo pre-generado, generando uno nuevo...")
+        # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
+        greeting_text = (
+            f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
+        )
+        greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
+        
+        if generate_speech_elevenlabs(greeting_text, greeting_filename):
+            greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
+            print(f"Saludo generado exitosamente: {greeting_url}")
+            response.play(greeting_url)
+        else:
+            print("Error generando saludo, usando fallback")
+            response.say(
+                f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+                "Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
+                "Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
+                "que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
+                "Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año.",
+                language="es-ES"
+            )
     
     # Guardar saludo en transcripción
     transcript_data = {
