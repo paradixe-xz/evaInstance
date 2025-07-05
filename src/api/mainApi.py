@@ -259,7 +259,7 @@ def schedule_call(number: str, name: str):
         
         # Generar saludo personalizado ANTES de la llamada en paralelo
         greeting_text = (
-            f"¡Alóoo {name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
+            f"Alo {name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
             f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
             f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
             f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
