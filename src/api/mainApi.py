@@ -524,77 +524,40 @@ def generate_audio_chunk(text_chunk: str, number: str) -> str:
         print(f"Error creando fallback de audio: {e}")
         return None
 
-def process_ai_stream_async(history: List[Dict], number: str, transcript_data: Dict):
-    """Procesa el streaming de IA y genera audio en paralelo"""
+def process_ai_response_sync(history: List[Dict], number: str, transcript_data: Dict):
+    """Procesa la respuesta de IA de forma secuencial: primero texto, luego audio"""
     try:
-        # Iniciar streaming de Ollama
+        # Obtener respuesta completa de Ollama (sin streaming)
         response = ollama.chat(
             model='ana',
-            messages=history,
-            stream=True
+            messages=history
         )
         
-        full_response = ""
-        chunk_buffer = ""
-        audio_files = []
-        
-        for chunk in response:
-            if 'message' in chunk and 'content' in chunk['message']:
-                content = chunk['message']['content']
-                full_response += content
-                chunk_buffer += content
-                
-                # Procesar chunks cuando tenemos suficiente texto (frases completas)
-                if len(chunk_buffer) > 20 and any(punct in chunk_buffer for punct in ['.', '!', '?', ',', ';']):
-                    # Encontrar el último punto de corte natural
-                    cut_points = ['.', '!', '?', ',', ';']
-                    cut_pos = -1
-                    for punct in cut_points:
-                        pos = chunk_buffer.rfind(punct)
-                        if pos > cut_pos:
-                            cut_pos = pos
-                    
-                    if cut_pos > 0:
-                        # Extraer chunk procesable
-                        text_chunk = chunk_buffer[:cut_pos + 1].strip()
-                        chunk_buffer = chunk_buffer[cut_pos + 1:]
-                        
-                        # Generar audio en paralelo
-                        audio_file = generate_audio_chunk(text_chunk, number)
-                        if audio_file:
-                            audio_files.append(audio_file)
-                            # Agregar a la cola de audio
-                            audio_queue = get_audio_queue(number)
-                            audio_queue.put({
-                                'file': audio_file,
-                                'url': f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_file)}",
-                                'text': text_chunk
-                            })
-        
-        # Procesar el buffer restante
-        if chunk_buffer.strip():
-            audio_file = generate_audio_chunk(chunk_buffer, number)
-            if audio_file:
-                audio_files.append(audio_file)
-                audio_queue = get_audio_queue(number)
-                audio_queue.put({
-                    'file': audio_file,
-                    'url': f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_file)}",
-                    'text': chunk_buffer
-                })
+        # Extraer el texto completo de la respuesta
+        ai_response = response['message']['content']
+        print(f"📝 Respuesta de IA obtenida: {len(ai_response)} caracteres")
         
         # Actualizar transcripción con la respuesta completa
         transcript_data["conversation"].append({
             "role": "assistant",
-            "content": full_response,
+            "content": ai_response,
             "timestamp": get_current_time().isoformat()
         })
         save_transcript(number, transcript_data)
         
-        return full_response, audio_files
+        # Generar audio completo para toda la respuesta
+        print(f"🎤 Generando audio para respuesta completa...")
+        audio_filename = f"audio/response_{number.replace('+', '').replace('-', '')}_{uuid.uuid4()}.wav"
+        
+        if generate_speech_elevenlabs(ai_response, audio_filename):
+            print(f"✅ Audio generado exitosamente: {audio_filename}")
+            return ai_response, [audio_filename]
+        else:
+            print("⚠️ Error generando audio, usando fallback")
+            return ai_response, []
         
     except Exception as e:
-        print(f"Error en streaming de IA: {e}")
+        print(f"Error procesando respuesta de IA: {e}")
         return "Lo siento, hubo un error procesando tu mensaje.", []
 
 # --- Endpoints principales ---
@@ -948,47 +911,37 @@ async def handle_speech(request: Request):
                 'content': entry['content']
             })
         
-        # Iniciar procesamiento de streaming en paralelo
-        print(f"🔄 Iniciando streaming de IA para {user_number}...")
+        # Procesar respuesta de IA de forma secuencial
+        print(f"🔄 Procesando respuesta de IA para {user_number}...")
         
-        # Ejecutar streaming en thread separado
-        loop = asyncio.new_event_loop()
-        def run_streaming():
-            asyncio.set_event_loop(loop)
-            return process_ai_stream_async(history, user_number, transcript_data)
+        # Ejecutar procesamiento en thread separado
+        def run_ai_processing():
+            return process_ai_response_sync(history, user_number, transcript_data)
         
         # Ejecutar en thread pool
-        future = audio_executor.submit(run_streaming)
+        future = audio_executor.submit(run_ai_processing)
         
-        # Esperar a que se complete todo el streaming de audio
-        print(f"⏳ Esperando a que se complete el streaming de audio para {user_number}...")
+        # Esperar a que se complete todo el procesamiento
+        print(f"⏳ Esperando a que se complete el procesamiento para {user_number}...")
         try:
-            ai_reply, all_audio_files = future.result(timeout=30)  # Aumentar timeout a 30 segundos
-            print(f"✅ Streaming completado: {len(all_audio_files)} archivos de audio")
+            ai_reply, audio_files = future.result(timeout=45)  # Timeout de 45 segundos
+            print(f"✅ Procesamiento completado: {len(audio_files)} archivos de audio")
             
-            # Construir respuesta con todos los chunks de audio
+            # Construir respuesta
             response = VoiceResponse()
             
-            # Obtener todos los chunks de la cola
-            audio_queue = get_audio_queue(user_number)
-            audio_chunks = []
-            
-            # Recoger todos los chunks disponibles
-            while not audio_queue.empty():
-                try:
-                    audio_chunk = audio_queue.get_nowait()
-                    audio_chunks.append(audio_chunk)
-                    print(f"🎵 Audio chunk listo: {audio_chunk['file']}")
-                except queue.Empty:
-                    break
-            
-            # Reproducir todos los chunks de audio en orden
-            for chunk in audio_chunks:
-                response.play(chunk['url'])
-                print(f"🎤 Reproduciendo: {chunk['text'][:50]}...")
+            if audio_files:
+                # Reproducir el archivo de audio completo
+                audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_files[0])}"
+                response.play(audio_url)
+                print(f"🎤 Reproduciendo audio completo: {audio_files[0]}")
+            else:
+                # Usar fallback si no se generó audio
+                print("⚠️ No se generó audio, usando fallback")
+                response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
                 
         except Exception as e:
-            print(f"❌ Error en streaming: {e}")
+            print(f"❌ Error en procesamiento: {e}")
             ai_reply = "Lo siento, hubo un error procesando tu mensaje."
             response = VoiceResponse()
             response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
