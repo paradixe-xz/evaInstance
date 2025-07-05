@@ -270,15 +270,45 @@ def schedule_call(number: str, name: str):
         # Crear directorio de audio si no existe
         os.makedirs("audio", exist_ok=True)
         
+        # Crear estado inicial con información del saludo
+        state = load_conversation_state(number)
+        state["stage"] = "call_in_progress"
+        state["name"] = name
+        state["greeting_audio_file"] = greeting_filename
+        state["greeting_ready"] = False  # Flag para indicar si está listo
+        state["greeting_generation_started"] = True
+        save_conversation_state(number, state)
+        
         # Generar saludo en thread separado para no bloquear
         def generate_greeting():
-            print(f"🎤 Generando saludo personalizado para {name}...")
-            if generate_speech_elevenlabs(greeting_text, greeting_filename):
-                greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
-                print(f"✅ Saludo generado: {greeting_url}")
-                return greeting_url
-            else:
-                print("⚠️ Error generando saludo, se usará fallback")
+            try:
+                print(f"🎤 Generando saludo personalizado para {name}...")
+                if generate_speech_elevenlabs(greeting_text, greeting_filename):
+                    greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
+                    print(f"✅ Saludo generado: {greeting_url}")
+                    
+                    # Actualizar estado cuando esté listo
+                    state = load_conversation_state(number)
+                    state["greeting_audio_url"] = greeting_url
+                    state["greeting_ready"] = True
+                    save_conversation_state(number, state)
+                    
+                    return greeting_url
+                else:
+                    print("⚠️ Error generando saludo, se usará fallback")
+                    # Marcar como fallback
+                    state = load_conversation_state(number)
+                    state["greeting_ready"] = True
+                    state["greeting_fallback"] = True
+                    save_conversation_state(number, state)
+                    return None
+            except Exception as e:
+                print(f"❌ Error en generación de saludo: {e}")
+                # Marcar como fallback
+                state = load_conversation_state(number)
+                state["greeting_ready"] = True
+                state["greeting_fallback"] = True
+                save_conversation_state(number, state)
                 return None
         
         # Ejecutar generación de saludo en paralelo
@@ -292,22 +322,11 @@ def schedule_call(number: str, name: str):
         )
         print(f"📞 Llamada iniciada: {call.sid}")
         
-        # Obtener resultado del saludo (con timeout)
-        try:
-            greeting_url = greeting_future.result(timeout=10)  # Aumentar timeout
-        except Exception as e:
-            print(f"⚠️ Timeout generando saludo: {e}")
-            greeting_url = None
-        
-        # Actualizar estado con información del saludo
+        # Actualizar estado con información de la llamada
         state = load_conversation_state(number)
-        state["stage"] = "call_in_progress"
         state["call_sid"] = call.sid
         state["call_started"] = True
         state["call_status"] = "in_progress"
-        state["name"] = name
-        state["greeting_audio_url"] = greeting_url
-        state["greeting_audio_file"] = greeting_filename
         save_conversation_state(number, state)
         
         return call.sid
@@ -686,6 +705,32 @@ SYSTEM {system_prompt}
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}
 
+class ScheduleCallRequest(BaseModel):
+    number: str
+    name: str
+
+@app.post("/schedule_call")
+def schedule_call_endpoint(request: ScheduleCallRequest):
+    """Endpoint para programar una llamada inmediata"""
+    try:
+        call_sid = schedule_call(request.number, request.name)
+        if call_sid:
+            return {
+                "status": "success",
+                "message": f"Llamada programada para {request.name}",
+                "call_sid": call_sid
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Error programando la llamada"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
 @app.get("/conversations/status")
 def get_conversations_status():
     """Obtiene el estado de todas las conversaciones"""
@@ -768,11 +813,29 @@ async def twilio_voice(request: Request):
         state["transcript_ready"] = True
         save_conversation_state(user_number, state)
     
-    # Usar saludo pre-generado si existe, sino generar uno nuevo
+    # Verificar si hay saludo pre-generado y esperar si es necesario
     greeting_audio_url = state.get("greeting_audio_url")
     greeting_audio_file = state.get("greeting_audio_file")
+    greeting_ready = state.get("greeting_ready", False)
+    greeting_fallback = state.get("greeting_fallback", False)
     
-    if greeting_audio_url and greeting_audio_file and os.path.exists(greeting_audio_file):
+    # Si la generación empezó pero no está lista, esperar un poco
+    if state.get("greeting_generation_started") and not greeting_ready and not greeting_fallback:
+        print(f"⏳ Esperando que se complete la generación del saludo para {user_name}...")
+        max_wait = 5  # Máximo 5 segundos de espera
+        wait_time = 0
+        while wait_time < max_wait and not greeting_ready and not greeting_fallback:
+            time.sleep(0.5)
+            wait_time += 0.5
+            # Recargar estado para ver si cambió
+            state = load_conversation_state(user_number)
+            greeting_ready = state.get("greeting_ready", False)
+            greeting_fallback = state.get("greeting_fallback", False)
+            greeting_audio_url = state.get("greeting_audio_url")
+            greeting_audio_file = state.get("greeting_audio_file")
+    
+    # Usar saludo pre-generado si está disponible y el archivo existe
+    if greeting_ready and greeting_audio_url and greeting_audio_file and os.path.exists(greeting_audio_file):
         print(f"🎤 Usando saludo pre-generado: {greeting_audio_url}")
         response.play(greeting_audio_url)
         greeting_text = (
@@ -783,7 +846,7 @@ async def twilio_voice(request: Request):
             f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
         )
     else:
-        print("⚠️ No se encontró saludo pre-generado, generando uno nuevo...")
+        print("⚠️ No se encontró saludo pre-generado o hubo error, generando uno nuevo...")
         # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
         greeting_text = (
             f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
