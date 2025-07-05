@@ -12,3 +12,6 @@ openpyxl
 pytz
 apscheduler
 psutil
+uvicorn
+python-dotenv
+requests

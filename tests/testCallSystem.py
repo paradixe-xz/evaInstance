@@ -10,7 +10,7 @@ from datetime import datetime
 import os
 
 # Configuración
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:4000"
 TEST_FILE = "test_contacts.xlsx"
 
 def create_test_contacts():

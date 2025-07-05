@@ -200,8 +200,24 @@ El sistema incluye herramientas de monitoreo:
 
 - **Estado de conversaciones**: `/conversations/status`
 - **Análisis listos**: `/analysis/ready_for_human`
+- **Estadísticas de audio**: `/audio-stats`
+- **Limpieza de audio**: `/cleanup-audio`
 - **Logs de transcripciones**: En `data/transcripts/`
 - **Análisis de IA**: En `data/analysis/`
+
+## ⚡ Optimizaciones de Rendimiento
+
+### Streaming de Audio
+- **Streaming de IA**: Procesamiento en chunks para reducir latencia
+- **Procesamiento paralelo**: Generación de audio en threads separados
+- **Colas de audio**: Gestión eficiente por número de teléfono
+- **Configuración optimizada**: ElevenLabs configurado para velocidad
+
+### Beneficios
+- **Latencia reducida**: De 9 segundos a menos de 3 segundos
+- **Respuestas fluidas**: Audio generado mientras se procesa la IA
+- **Mejor UX**: Conversaciones más naturales y rápidas
+- **Gestión de memoria**: Limpieza automática de archivos antiguos
 
 ## 📞 Soporte
 

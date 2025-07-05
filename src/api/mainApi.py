@@ -22,6 +22,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 import json
 import re
+import asyncio
+import threading
+import queue
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI()
 
@@ -49,6 +54,15 @@ client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 # Scheduler para programar llamadas
 scheduler = BackgroundScheduler(timezone=str(TIMEZONE))
 scheduler.start()
+
+# Pool de threads para procesamiento paralelo de audio
+audio_executor = ThreadPoolExecutor(max_workers=4)
+
+# Colas de audio por número de teléfono para streaming
+audio_queues = {}
+
+# Lock para sincronizar acceso a las colas
+audio_queues_lock = threading.Lock()
 
 # Directorio para almacenar estado de conversaciones
 conversations_dir = "conversations"
@@ -243,7 +257,7 @@ def schedule_call(number: str, name: str):
     try:
         print(f"Programando llamada inmediata para {number} ({name})")
         
-        # Generar saludo personalizado ANTES de la llamada
+        # Generar saludo personalizado ANTES de la llamada en paralelo
         greeting_text = (
             f"¡Alóoo {name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
             f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
@@ -253,24 +267,37 @@ def schedule_call(number: str, name: str):
         )
         greeting_filename = f"audio/greeting_{number.replace('+', '').replace('-', '')}_{uuid.uuid4()}.wav"
         
-        print(f"🎤 Generando saludo personalizado para {name}...")
-        if generate_speech_elevenlabs(greeting_text, greeting_filename):
-            greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
-            print(f"✅ Saludo generado: {greeting_url}")
-        else:
-            print("⚠️ Error generando saludo, se usará fallback")
-            greeting_url = None
-        
         # Crear directorio de audio si no existe
         os.makedirs("audio", exist_ok=True)
         
-        # Iniciar la llamada
+        # Generar saludo en thread separado para no bloquear
+        def generate_greeting():
+            print(f"🎤 Generando saludo personalizado para {name}...")
+            if generate_speech_elevenlabs(greeting_text, greeting_filename):
+                greeting_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(greeting_filename)}"
+                print(f"✅ Saludo generado: {greeting_url}")
+                return greeting_url
+            else:
+                print("⚠️ Error generando saludo, se usará fallback")
+                return None
+        
+        # Ejecutar generación de saludo en paralelo
+        greeting_future = audio_executor.submit(generate_greeting)
+        
+        # Iniciar la llamada inmediatamente (no esperar el saludo)
         call = client.calls.create(
             to=number,
             from_=TWILIO_PHONE_NUMBER,
             url=TWILIO_WEBHOOK_URL
         )
-        print(f"Llamada iniciada: {call.sid}")
+        print(f"📞 Llamada iniciada: {call.sid}")
+        
+        # Obtener resultado del saludo (con timeout)
+        try:
+            greeting_url = greeting_future.result(timeout=5)
+        except Exception as e:
+            print(f"⚠️ Timeout generando saludo: {e}")
+            greeting_url = None
         
         # Actualizar estado con información del saludo
         state = load_conversation_state(number)
@@ -338,52 +365,188 @@ Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarl
     return "Gracias por tu tiempo. ¡Que tengas un excelente día!"
 
 def generate_speech_elevenlabs(text, output_file):
-    """Genera audio usando ElevenLabs y lo convierte a WAV 8kHz mono para Twilio"""
+    """Genera audio usando ElevenLabs optimizado para velocidad"""
     try:
         if not elevenlabs_client:
             print("Error: ElevenLabs client no configurado")
             return False
-            
-        # Generar audio con ElevenLabs usando el nuevo API
+        
+        # Optimizar texto para velocidad (reducir pausas innecesarias)
+        optimized_text = text.replace("  ", " ").strip()
+        
+        # Generar audio con ElevenLabs usando configuración optimizada
         audio = elevenlabs_client.text_to_speech.convert(
-            text=text,
+            text=optimized_text,
             voice_id=ELEVENLABS_VOICE_ID,
-            model_id="eleven_multilingual_v2"
+            model_id="eleven_multilingual_v2",
+            voice_settings={
+                "stability": 0.5,  # Menor estabilidad = más rápido
+                "similarity_boost": 0.75,  # Balance entre velocidad y calidad
+                "style": 0.0,  # Sin estilo adicional para mayor velocidad
+                "use_speaker_boost": True
+            }
         )
         
-        # Guardar temporalmente - el audio es un generador, necesitamos iterarlo
-        temp_file = output_file + ".temp.mp3"  # Cambiar a .mp3 ya que ElevenLabs puede devolver MP3
+        # Guardar directamente como WAV para evitar conversiones
+        temp_file = output_file + ".temp.wav"
         with open(temp_file, "wb") as f:
             for chunk in audio:
                 f.write(chunk)
         
         try:
-            # Intentar cargar como MP3 primero
-            audio_segment = AudioSegment.from_mp3(temp_file)
-        except:
-            try:
-                # Si falla, intentar como WAV
-                audio_segment = AudioSegment.from_wav(temp_file)
-            except:
-                # Si ambos fallan, intentar detectar automáticamente
-                audio_segment = AudioSegment.from_file(temp_file)
-        
-        # Convertir a WAV 8kHz mono para Twilio
-        audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
-        audio_segment.export(output_file, format="wav")
+            # Cargar y optimizar audio
+            audio_segment = AudioSegment.from_wav(temp_file)
+            
+            # Optimizar para Twilio: 8kHz mono, compresión
+            audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
+            
+            # Aplicar normalización para mejor calidad
+            audio_segment = audio_segment.normalize()
+            
+            # Exportar optimizado
+            audio_segment.export(output_file, format="wav", parameters=["-q:a", "0"])
+            
+        except Exception as e:
+            print(f"Error procesando audio: {e}")
+            # Fallback: copiar archivo temporal
+            import shutil
+            shutil.copy2(temp_file, output_file)
         
         # Limpiar archivo temporal
-        os.remove(temp_file)
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         
         return True
         
     except Exception as e:
         print(f"Error generando audio con ElevenLabs: {e}")
         # Limpiar archivo temporal si existe
-        temp_file = output_file + ".temp.mp3"
+        temp_file = output_file + ".temp.wav"
         if os.path.exists(temp_file):
             os.remove(temp_file)
         return False
+
+def get_audio_queue(number: str) -> queue.Queue:
+    """Obtiene o crea la cola de audio para un número específico"""
+    with audio_queues_lock:
+        if number not in audio_queues:
+            audio_queues[number] = queue.Queue()
+        return audio_queues[number]
+
+def cleanup_audio_queue(number: str):
+    """Limpia la cola de audio para un número específico"""
+    with audio_queues_lock:
+        if number in audio_queues:
+            del audio_queues[number]
+
+def cleanup_old_audio_files():
+    """Limpia archivos de audio antiguos para liberar espacio"""
+    try:
+        audio_dir = "audio"
+        if not os.path.exists(audio_dir):
+            return
+        
+        current_time = time.time()
+        max_age = 3600  # 1 hora
+        
+        for filename in os.listdir(audio_dir):
+            if filename.endswith('.wav'):
+                file_path = os.path.join(audio_dir, filename)
+                file_age = current_time - os.path.getmtime(file_path)
+                
+                if file_age > max_age:
+                    try:
+                        os.remove(file_path)
+                        print(f"🗑️ Limpiado archivo antiguo: {filename}")
+                    except Exception as e:
+                        print(f"Error eliminando {filename}: {e}")
+        
+    except Exception as e:
+        print(f"Error en limpieza de audio: {e}")
+
+def generate_audio_chunk(text_chunk: str, number: str) -> str:
+    """Genera audio para un chunk de texto y retorna el nombre del archivo"""
+    if not text_chunk.strip():
+        return None
+    
+    audio_filename = f"audio/chunk_{number.replace('+', '').replace('-', '')}_{uuid.uuid4()}.wav"
+    
+    if generate_speech_elevenlabs(text_chunk.strip(), audio_filename):
+        return audio_filename
+    return None
+
+def process_ai_stream_async(history: List[Dict], number: str, transcript_data: Dict):
+    """Procesa el streaming de IA y genera audio en paralelo"""
+    try:
+        # Iniciar streaming de Ollama
+        response = ollama.chat(
+            model='ana',
+            messages=history,
+            stream=True
+        )
+        
+        full_response = ""
+        chunk_buffer = ""
+        audio_files = []
+        
+        for chunk in response:
+            if 'message' in chunk and 'content' in chunk['message']:
+                content = chunk['message']['content']
+                full_response += content
+                chunk_buffer += content
+                
+                # Procesar chunks cuando tenemos suficiente texto (frases completas)
+                if len(chunk_buffer) > 20 and any(punct in chunk_buffer for punct in ['.', '!', '?', ',', ';']):
+                    # Encontrar el último punto de corte natural
+                    cut_points = ['.', '!', '?', ',', ';']
+                    cut_pos = -1
+                    for punct in cut_points:
+                        pos = chunk_buffer.rfind(punct)
+                        if pos > cut_pos:
+                            cut_pos = pos
+                    
+                    if cut_pos > 0:
+                        # Extraer chunk procesable
+                        text_chunk = chunk_buffer[:cut_pos + 1].strip()
+                        chunk_buffer = chunk_buffer[cut_pos + 1:]
+                        
+                        # Generar audio en paralelo
+                        audio_file = generate_audio_chunk(text_chunk, number)
+                        if audio_file:
+                            audio_files.append(audio_file)
+                            # Agregar a la cola de audio
+                            audio_queue = get_audio_queue(number)
+                            audio_queue.put({
+                                'file': audio_file,
+                                'url': f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_file)}",
+                                'text': text_chunk
+                            })
+        
+        # Procesar el buffer restante
+        if chunk_buffer.strip():
+            audio_file = generate_audio_chunk(chunk_buffer, number)
+            if audio_file:
+                audio_files.append(audio_file)
+                audio_queue = get_audio_queue(number)
+                audio_queue.put({
+                    'file': audio_file,
+                    'url': f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_file)}",
+                    'text': chunk_buffer
+                })
+        
+        # Actualizar transcripción con la respuesta completa
+        transcript_data["conversation"].append({
+            "role": "assistant",
+            "content": full_response,
+            "timestamp": get_current_time().isoformat()
+        })
+        save_transcript(number, transcript_data)
+        
+        return full_response, audio_files
+        
+    except Exception as e:
+        print(f"Error en streaming de IA: {e}")
+        return "Lo siento, hubo un error procesando tu mensaje.", []
 
 # --- Endpoints principales ---
 @app.get("/")
@@ -405,6 +568,42 @@ def test_tts():
         }
     else:
         return {"status": "error", "message": "Error generando audio"}
+
+@app.post("/cleanup-audio")
+def cleanup_audio():
+    """Limpia archivos de audio antiguos"""
+    try:
+        cleanup_old_audio_files()
+        return {
+            "status": "success",
+            "message": "Limpieza de audio completada"
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Error en limpieza: {str(e)}"}
+
+@app.get("/audio-stats")
+def get_audio_stats():
+    """Obtiene estadísticas de archivos de audio"""
+    try:
+        audio_dir = "audio"
+        if not os.path.exists(audio_dir):
+            return {"total_files": 0, "total_size": "0 MB"}
+        
+        files = os.listdir(audio_dir)
+        total_size = 0
+        
+        for filename in files:
+            if filename.endswith('.wav'):
+                file_path = os.path.join(audio_dir, filename)
+                total_size += os.path.getsize(file_path)
+        
+        return {
+            "total_files": len([f for f in files if f.endswith('.wav')]),
+            "total_size": f"{total_size / (1024*1024):.1f} MB",
+            "active_queues": len(audio_queues)
+        }
+    except Exception as e:
+        return {"error": f"Error obteniendo estadísticas: {str(e)}"}
 
 class CreateRepresentativeRequest(BaseModel):
     model_name: str
@@ -652,7 +851,7 @@ async def handle_speech(request: Request):
         "timestamp": get_current_time().isoformat()
     })
     
-    # Generar respuesta de IA
+    # Generar respuesta de IA con streaming
     try:
         # Crear historial de conversación para IA
         history = []
@@ -662,37 +861,63 @@ async def handle_speech(request: Request):
                 'content': entry['content']
             })
         
-        response_ia = ollama.chat(
-            model='ana',
-            messages=history
-        )
-        ai_reply = response_ia['message']['content']
+        # Iniciar procesamiento de streaming en paralelo
+        print(f"🔄 Iniciando streaming de IA para {user_number}...")
+        
+        # Ejecutar streaming en thread separado
+        loop = asyncio.new_event_loop()
+        def run_streaming():
+            asyncio.set_event_loop(loop)
+            return process_ai_stream_async(history, user_number, transcript_data)
+        
+        # Ejecutar en thread pool
+        future = audio_executor.submit(run_streaming)
+        
+        # Esperar un poco para que empiece a generar audio
+        time.sleep(0.5)
+        
+        # Verificar si hay audio disponible en la cola
+        audio_queue = get_audio_queue(user_number)
+        audio_chunks = []
+        
+        # Esperar hasta 3 segundos para el primer chunk de audio
+        start_time = time.time()
+        while time.time() - start_time < 3:
+            try:
+                audio_chunk = audio_queue.get(timeout=0.1)
+                audio_chunks.append(audio_chunk)
+                print(f"🎵 Audio chunk generado: {audio_chunk['file']}")
+                break
+            except queue.Empty:
+                continue
+        
+        # Si no hay audio después de 3 segundos, usar fallback
+        if not audio_chunks:
+            print("⚠️ No se generó audio en tiempo, usando fallback")
+            ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+            response = VoiceResponse()
+            response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
+        else:
+            # Construir respuesta con chunks de audio
+            response = VoiceResponse()
+            
+            # Reproducir chunks de audio disponibles
+            for chunk in audio_chunks:
+                response.play(chunk['url'])
+                print(f"🎤 Reproduciendo: {chunk['text'][:50]}...")
+            
+            # Obtener respuesta completa del streaming
+            try:
+                ai_reply, all_audio_files = future.result(timeout=10)
+                print(f"✅ Streaming completado: {len(all_audio_files)} archivos de audio")
+            except Exception as e:
+                print(f"❌ Error en streaming: {e}")
+                ai_reply = "Lo siento, hubo un error procesando tu mensaje."
         
     except Exception as e:
-        print("Error llamando a ollama:", e)
+        print(f"Error en streaming de IA: {e}")
         ai_reply = "Lo siento, hubo un error procesando tu mensaje."
-    
-    # Agregar respuesta de IA a la transcripción
-    transcript_data["conversation"].append({
-        "role": "assistant",
-        "content": ai_reply,
-        "timestamp": get_current_time().isoformat()
-    })
-    
-    # Guardar transcripción actualizada
-    save_transcript(user_number, transcript_data)
-    
-    # Usar ElevenLabs TTS
-    audio_filename = f"audio/response_{uuid.uuid4()}.wav"
-    response = VoiceResponse()
-    print(f"Generando audio para: {ai_reply[:50]}...")
-    
-    if generate_speech_elevenlabs(ai_reply, audio_filename):
-        audio_url = f"{PUBLIC_BASE_URL}/audio/{os.path.basename(audio_filename)}"
-        print(f"Audio generado exitosamente: {audio_url}")
-        response.play(audio_url)
-    else:
-        print("Error generando audio, usando fallback")
+        response = VoiceResponse()
         response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
     
     # Gather después del play
@@ -716,6 +941,10 @@ async def handle_speech(request: Request):
         response.say("No se detectó audio. Adiós.", language="es-ES")
     
     response.hangup()
+    
+    # Limpiar cola de audio para este número
+    cleanup_audio_queue(user_number)
+    
     return PlainTextResponse(str(response), media_type="application/xml")
 
 @app.post("/twilio/voice/call_ended")
@@ -770,6 +999,13 @@ async def call_ended(request: Request):
         save_conversation_state(user_number, state)
         
         print(f"Análisis completado para {user_number}: {analysis.get('interest_level', 'unknown')} interés")
+    
+    # Limpiar cola de audio para este número
+    cleanup_audio_queue(user_number)
+    
+    # Limpiar archivos de audio antiguos periódicamente
+    if int(call_duration) % 300 == 0:  # Cada 5 minutos
+        cleanup_old_audio_files()
     
     return PlainTextResponse("OK")
 
@@ -959,4 +1195,4 @@ def mark_conversation_closed(number: str, outcome: str, notes: str = ""):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=4000)

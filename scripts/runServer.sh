@@ -77,10 +77,10 @@ fi
 
 # Verificar y actualizar el modelo ANA
 echo "🤖 Verificando y actualizando modelo ANA..."
-if [ -f "scripts/update_ana_model.sh" ]; then
+if [ -f "scripts/updateAnaModel.sh" ]; then
   echo "🔄 Actualizando modelo ANA para llamadas telefónicas..."
-  chmod +x scripts/update_ana_model.sh
-  ./scripts/update_ana_model.sh
+  chmod +x scripts/updateAnaModel.sh
+  ./scripts/updateAnaModel.sh
   if [ $? -eq 0 ]; then
     echo "✅ Modelo ANA actualizado exitosamente"
   else
@@ -113,6 +113,8 @@ echo "   • Llamadas automáticas inmediatas"
 echo "   • Transcripción completa de conversaciones"
 echo "   • Análisis automático con IA"
 echo "   • Seguimiento humano inteligente"
+echo "   • Streaming optimizado de audio"
+echo "   • Procesamiento paralelo de TTS"
 echo ""
 echo "🌐 Servidor disponible en: http://localhost:4000"
 echo "📚 Documentación: https://9jtwxh1smksq25-4000.proxy.runpod.net/docs"
@@ -123,9 +125,12 @@ echo "   POST /sendNumbers - Subir contactos y hacer llamadas"
 echo "   GET  /conversations/status - Estado de conversaciones"
 echo "   GET  /analysis/ready_for_human - Listos para seguimiento"
 echo "   POST /analysis/mark_closed - Marcar como cerrado"
+echo "   GET  /audio-stats - Estadísticas de audio"
+echo "   POST /cleanup-audio - Limpieza de archivos"
 echo ""
 echo "🧪 Para probar el sistema:"
 echo "   python tests/testCallSystem.py"
+echo "   python tests/testStreamingOptimization.py"
 echo ""
 echo "📖 Documentación completa: README.md"
 echo ""
@@ -175,6 +180,8 @@ echo "   • Llamadas directas automáticas"
 echo "   • Transcripción completa"
 echo "   • Análisis inteligente de IA"
 echo "   • Seguimiento humano optimizado"
+echo "   • Streaming optimizado de audio"
+echo "   • Latencia reducida de 9s a < 3s"
 echo ""
 
 # Esperar a que termine cualquiera de los procesos
