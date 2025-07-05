@@ -77,10 +77,10 @@ fi
 
 # Verificar y actualizar el modelo ANA
 echo "🤖 Verificando y actualizando modelo ANA..."
-if [ -f "update_ana_phone_system.sh" ]; then
+if [ -f "scripts/update_ana_model.sh" ]; then
   echo "🔄 Actualizando modelo ANA para llamadas telefónicas..."
-  chmod +x update_ana_phone_system.sh
-  ./update_ana_phone_system.sh
+  chmod +x scripts/update_ana_model.sh
+  ./scripts/update_ana_model.sh
   if [ $? -eq 0 ]; then
     echo "✅ Modelo ANA actualizado exitosamente"
   else
@@ -125,21 +125,21 @@ echo "   GET  /analysis/ready_for_human - Listos para seguimiento"
 echo "   POST /analysis/mark_closed - Marcar como cerrado"
 echo ""
 echo "🧪 Para probar el sistema:"
-echo "   python test_call_system.py"
+echo "   python tests/testCallSystem.py"
 echo ""
-echo "📖 Documentación completa: README_SISTEMA_LLAMADAS.md"
+echo "📖 Documentación completa: README.md"
 echo ""
 echo "⏹️  Presiona Ctrl+C para detener todo"
 echo ""
 
 # Iniciar monitor de estado en segundo plano
 echo "📊 Iniciando monitor de estado..."
-python3 status_monitor.py > /dev/null 2>&1
+python3 src/core/statusMonitor.py > /dev/null 2>&1
 
 # Función para el monitor que se ejecuta cada 30 segundos
 monitor_loop() {
     while true; do
-        python3 status_monitor.py > /dev/null 2>&1
+        python3 src/core/statusMonitor.py > /dev/null 2>&1
         sleep 30
     done
 }
@@ -152,7 +152,7 @@ echo "✅ Monitor iniciado (PID: $MONITOR_PID)"
 
 # Iniciar servidor principal
 echo "🌐 Iniciando servidor principal..."
-uvicorn main:app --host 0.0.0.0 --port 4000 &
+uvicorn src.api.mainApi:app --host 0.0.0.0 --port 4000 &
 SERVER_PID=$!
 
 echo "✅ Servidor iniciado (PID: $SERVER_PID)"

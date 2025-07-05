@@ -9,6 +9,6 @@ if [ -f "status.txt" ]; then
     cat status.txt
 else
     echo "❌ Archivo status.txt no encontrado"
-    echo "💡 Ejecuta primero: python3 status_monitor.py"
-    echo "   O inicia el servidor completo: ./run_server.sh"
+    echo "💡 Ejecuta primero: python3 src/core/statusMonitor.py"
+    echo "   O inicia el servidor completo: ./scripts/runServer.sh"
 fi 

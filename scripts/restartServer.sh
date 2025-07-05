@@ -4,22 +4,22 @@ echo "🔄 Reiniciando servidor con lógica mejorada de WhatsApp..."
 
 # Detener procesos existentes
 echo "Deteniendo procesos existentes..."
-pkill -f "python.*main.py" || true
-pkill -f "uvicorn.*main:app" || true
+pkill -f "python.*src/api/mainApi.py" || true
+pkill -f "uvicorn.*src.api.mainApi:app" || true
 
 # Esperar un momento
 sleep 2
 
 # Verificar que no hay procesos corriendo
-if pgrep -f "main.py" > /dev/null; then
+if pgrep -f "src/api/mainApi.py" > /dev/null; then
     echo "❌ Aún hay procesos corriendo, forzando cierre..."
-    pkill -9 -f "main.py" || true
+    pkill -9 -f "src/api/mainApi.py" || true
     sleep 1
 fi
 
 # Iniciar servidor
 echo "🚀 Iniciando servidor..."
-python main.py &
+python src/api/mainApi.py &
 
 # Esperar a que el servidor inicie
 sleep 3

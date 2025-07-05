@@ -1,165 +1,185 @@
-# evaInstance
+# Sistema ANA - Asistente de IA para Préstamos por Libranza
 
-Sistema de IA conversacional con TTS mejorado en español, procesamiento de archivos Excel y programación inteligente de llamadas.
+## 🎯 Descripción General
 
-## Características
-- Integración con Ollama para respuestas de IA
-- Text-to-Speech mejorado con ElevenLabs
-- Soporte para llamadas telefónicas y WhatsApp
-- Procesamiento de archivos Excel para envío masivo de contactos
-- **Sistema inteligente de formularios por WhatsApp**
-- **Programación automática de llamadas con zona horaria de Barranquilla**
-- **Primer contacto siempre por chat (no llamadas inmediatas)**
-- Múltiples opciones de TTS (online y offline)
+Sistema de IA conversacional especializado en asesoría financiera para préstamos por libranza, con capacidad de llamadas directas, transcripción completa y análisis inteligente para determinar el seguimiento humano necesario.
 
-## TTS Mejorado
+## 🔄 Flujo de Trabajo
 
-El sistema incluye opciones de Text-to-Speech:
+### 1. **Carga de Contactos** 📊
+- Subir archivo Excel con columnas `nombre` y `numero`
+- Validación automática y limpieza de números
+- Programación inmediata de llamadas
 
-### 1. ElevenLabs TTS (Recomendado)
-- Requiere conexión a internet
-- Excelente calidad de voz en español
-- Configuración optimizada para Twilio
-- Conversión automática a WAV 8kHz mono
+### 2. **Llamadas Directas** 📞
+- Llamadas automáticas a todos los contactos válidos
+- Transcripción completa de toda la conversación
+- TTS con ElevenLabs para voz natural
+- Guión optimizado para ventas de préstamos
 
-### 2. Google TTS Mejorado (gtts_improved)
-- Requiere conexión a internet
-- Buena calidad de voz en español
-- Configuración optimizada
+### 3. **Análisis Automático de IA** 🤖
+- Análisis completo de la transcripción
+- Determinación del nivel de interés
+- Identificación de objeciones y puntos clave
+- Asignación de prioridad para seguimiento
 
-### 3. TTS Offline (pyttsx3)
-- No requiere internet
-- Usa voces del sistema operativo
-- Funciona sin conexión
+### 4. **Seguimiento Humano** 👥
+- Conversaciones listas para cierre humano
+- Información completa de análisis disponible
+- Sistema de marcado de resultados
 
-## Procesamiento de Archivos Excel
+## 📁 Estructura del Proyecto
 
-El sistema ahora soporta el envío masivo de contactos mediante archivos Excel:
-
-### Formato Requerido
-El archivo Excel debe contener las siguientes columnas:
-- **nombre**: Nombre del contacto (opcional pero recomendado)
-- **numero**: Número de teléfono (requerido)
-
-### Ejemplo de contenido:
 ```
-nombre,numero
-Juan Pérez,+34600123456
-María García,34600123457
-Carlos López,+34600123458
-Ana Martínez,34600123459
+evaInstance/
+├── src/
+│   ├── api/           # API endpoints (mainApi.py)
+│   ├── core/          # Lógica principal (mainApp.py, statusMonitor.py)
+│   ├── config/        # Configuraciones (configTts.py)
+│   └── utils/         # Utilidades
+├── scripts/           # Scripts de ejecución y mantenimiento
+├── docs/              # Documentación
+├── tests/             # Archivos de prueba
+├── data/              # Datos del sistema
+│   ├── conversations/ # Estados de conversaciones
+│   ├── transcripts/   # Transcripciones completas
+│   ├── analysis/      # Análisis de IA
+│   └── audio/         # Archivos de audio TTS
+└── requirements.txt   # Dependencias
 ```
 
-### Validaciones
-- Los números deben tener al menos 10 dígitos
-- Se puede usar con o sin el prefijo +
-- Se ignorarán las filas sin número
-- Se limpian automáticamente espacios y caracteres especiales
-
-## Sistema de Formularios y Programación
-
-### Flujo de Interacción
-1. **Mensaje Inicial**: Se envía un mensaje de WhatsApp con opciones estructuradas
-2. **Confirmación del Usuario**: El usuario debe confirmar si quiere recibir una llamada
-3. **Programación de Llamada**: Se programa la llamada según la hora indicada por el usuario
-4. **Ejecución Automática**: La llamada se ejecuta automáticamente en el momento programado
-
-### Estados de Conversación
-- **initial**: Mensaje inicial enviado, esperando respuesta
-- **waiting_confirmation**: Usuario confirmó interés, esperando hora
-- **scheduled_call**: Llamada programada, esperando ejecución
-- **call_in_progress**: Llamada en curso
-- **completed**: Conversación finalizada
-
-### Formato de Respuestas del Usuario
-El sistema reconoce múltiples formatos de tiempo:
-- "Sí, llámame" - Para llamada inmediata
-- "Llámame a las 3:30 PM" - Programar para hora específica
-- "Mañana a las 10:00" - Programar para mañana
-- "En 2 horas" - Programar en tiempo relativo
-- "No, gracias" - Cerrar conversación
-
-### Zona Horaria
-- **Configurada para Barranquilla, Colombia** (UTC-5)
-- Todas las programaciones se manejan en hora local
-- Reconocimiento automático de horarios AM/PM y 24h
-
-## Configuración
+## 🔧 Configuración
 
 ### Variables de Entorno Requeridas
+
 ```bash
 # Twilio
 export TWILIO_ACCOUNT_SID=your_account_sid
 export TWILIO_AUTH_TOKEN=your_auth_token
 export TWILIO_PHONE_NUMBER=your_phone_number
-export TWILIO_WHATSAPP_NUMBER=your_whatsapp_number
 export TWILIO_WEBHOOK_URL=your_webhook_url
 
 # ElevenLabs
 export ELEVENLABS_API_KEY=your_api_key
-export ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # Rachel voice (opcional)
+export ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
 
 # URL pública para archivos de audio
 export PUBLIC_BASE_URL=your_public_url
 ```
 
-Para cambiar el método de TTS, establece la variable de entorno:
+## 🚀 Instalación y Ejecución
+
+### 1. Instalar dependencias
 ```bash
-export TTS_METHOD=gtts_improved  # o pyttsx3
+pip install -r requirements.txt
 ```
 
-## Endpoints
-
-### POST /sendNumbers
-Procesa archivo Excel con contactos y envía mensajes iniciales de WhatsApp.
-
-**Request:**
-- Content-Type: multipart/form-data
-- Body: file (archivo Excel .xlsx o .xls)
-
-**Response:**
-```json
-{
-  "message": "Procesamiento completado. X contactos válidos encontrados.",
-  "total_contacts": 10,
-  "valid_contacts": 8,
-  "invalid_contacts": 2,
-  "results": [...],
-  "invalid_numbers": [...]
-}
+### 2. Configurar variables de entorno
+```bash
+# Copiar y configurar las variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales
 ```
 
-### GET /conversations/status
-Obtiene el estado de todas las conversaciones activas.
+### 3. Ejecutar el servidor
+```bash
+# Opción 1: Directo
+python src/api/mainApi.py
 
-**Response:**
-```json
-{
-  "total_conversations": 5,
-  "current_time": "2024-01-15T14:30:00-05:00",
-  "timezone": "America/Bogota",
-  "conversations": [
-    {
-      "number": "+34600123456",
-      "name": "Juan Pérez",
-      "stage": "scheduled_call",
-      "messages_sent": 3,
-      "call_scheduled": true,
-      "scheduled_time": "2024-01-15T16:00:00-05:00",
-      "last_interaction": "2024-01-15T14:25:00-05:00",
-      "time_since_last_interaction": "0:05:00"
-    }
-  ]
-}
+# Opción 2: Con script
+chmod +x scripts/runServer.sh
+./scripts/runServer.sh
 ```
 
-### POST /twilio/whatsapp
-Webhook para procesar mensajes de WhatsApp y manejar formularios.
+## 📊 Endpoints Principales
 
-### POST /twilio/voice
-Webhook para manejar llamadas telefónicas programadas.
+### POST `/sendNumbers`
+Procesa archivo Excel y programa llamadas directas
 
-## Requirements:
+```bash
+curl -X POST "http://localhost:8000/sendNumbers" \
+  -F "file=@contactos.xlsx"
+```
+
+### GET `/conversations/status`
+Estado de todas las conversaciones
+
+```bash
+curl "http://localhost:8000/conversations/status"
+```
+
+### GET `/analysis/ready_for_human`
+Conversaciones listas para seguimiento humano
+
+```bash
+curl "http://localhost:8000/analysis/ready_for_human"
+```
+
+### POST `/analysis/mark_closed`
+Marca conversación como cerrada
+
+```bash
+curl -X POST "http://localhost:8000/analysis/mark_closed" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "number": "+573001234567",
+    "outcome": "interested",
+    "notes": "Cliente muy interesado, agendó reunión"
+  }'
+```
+
+## 📈 Estados de Conversación
+
+| Estado | Descripción |
+|--------|-------------|
+| `initial` | Contacto cargado, esperando llamada |
+| `call_in_progress` | Llamada en curso |
+| `call_completed` | Llamada terminada, pendiente análisis |
+| `analyzed` | Análisis de IA completado |
+| `ready_for_human` | Listo para seguimiento humano |
+| `closed_by_human` | Cerrado por persona real |
+
+## 🤖 Análisis de IA
+
+El sistema analiza automáticamente cada transcripción y determina:
+
+### Nivel de Interés
+- **high**: Muy interesado, necesita seguimiento inmediato
+- **medium**: Interesado moderado, seguimiento normal
+- **low**: Poco interés, seguimiento básico
+- **none**: Sin interés, no requiere seguimiento
+
+### Acciones Recomendadas
+- `schedule_meeting`: Agendar reunión
+- `send_info`: Enviar información
+- `follow_up_call`: Llamada de seguimiento
+- `close_deal`: Cerrar trato
+- `no_interest`: Sin interés
+
+## 🛠️ Scripts de Mantenimiento
+
+### Ejecutar servidor
+```bash
+./scripts/runServer.sh
+```
+
+### Reiniciar sistema
+```bash
+./scripts/restartServer.sh
+```
+
+### Actualizar modelo ANA
+```bash
+./scripts/updateAnaModel.sh
+```
+
+### Monitorear estado
+```bash
+./scripts/showStatus.sh
+```
+
+## 📋 Dependencias
+
 - fastapi
 - pydantic
 - twilio
@@ -174,114 +194,15 @@ Webhook para manejar llamadas telefónicas programadas.
 - pytz
 - apscheduler
 
-See requirements.txt for installation.
+## 🔍 Monitoreo
 
-## Instalación
+El sistema incluye herramientas de monitoreo:
 
-1. Instalar dependencias:
-```bash
-pip install -r requirements.txt
-```
+- **Estado de conversaciones**: `/conversations/status`
+- **Análisis listos**: `/analysis/ready_for_human`
+- **Logs de transcripciones**: En `data/transcripts/`
+- **Análisis de IA**: En `data/analysis/`
 
-2. Configurar variables de entorno
+## 📞 Soporte
 
-3. Ejecutar el servidor:
-```bash
-python main.py
-```
-
-## Uso
-
-1. **Preparar archivo Excel** con columnas "nombre" y "numero"
-2. **Subir archivo** a través del frontend o API
-3. **El sistema envía mensajes iniciales** por WhatsApp con formularios
-4. **Los usuarios responden** con sus preferencias de tiempo
-5. **Las llamadas se programan automáticamente** según las respuestas
-6. **Monitorear conversaciones** con el endpoint `/conversations/status`
-
-## Scripts de Ejecución
-
-### 🚀 Ejecutar Todo (Servidor + Monitor)
-```bash
-./run_server.sh
-```
-- Inicia el servidor principal en puerto 4000
-- Inicia el monitor de estado automáticamente
-- Actualiza `status.txt` cada 30 segundos
-- Presiona `Ctrl+C` para detener todo
-
-### 📊 Solo Monitor de Estado
-```bash
-./run_monitor.sh
-```
-- Útil cuando el servidor ya está corriendo
-- Actualiza `status.txt` cada 30 segundos
-- Presiona `Ctrl+C` para detener
-
-### 📋 Ver Estado Rápidamente
-```bash
-./show_status.sh
-# o simplemente:
-cat status.txt
-```
-
-### 🔄 Generar Estado Manualmente
-```bash
-python3 status_monitor.py
-```
-
-## Monitoreo en Tiempo Real
-
-El sistema incluye un monitor completo que genera un archivo `status.txt` con:
-
-### 📊 Información del Sistema
-- Hora actual (Barranquilla UTC-5)
-- Uso de CPU y memoria
-- Procesos Python activos
-- Llamadas programadas
-
-### 💬 Conversaciones Activas
-- Estado de cada conversación
-- Tiempo desde última interacción
-- Llamadas programadas y su estado
-- Número de mensajes enviados
-
-### 🎵 Archivos de Audio
-- Cantidad y tamaño total
-- Archivos más recientes
-- Tiempo de creación
-
-### 📝 Archivos de Log
-- Historial de conversaciones
-- Tamaño y líneas por archivo
-- Última modificación
-
-### 🔧 Procesos del Sistema
-- Top 5 procesos Python por CPU
-- Uso de memoria por proceso
-
-## Estructura de Archivos
-
-```
-evaInstance/
-├── main.py                 # Servidor principal con lógica de formularios
-├── app.py                  # Configuración adicional
-├── config_tts.py          # Configuración de TTS
-├── requirements.txt       # Dependencias
-├── run_server.sh          # Script principal (servidor + monitor)
-├── run_monitor.sh         # Script solo monitor
-├── show_status.sh         # Script para ver estado
-├── status_monitor.py      # Monitor de estado
-├── status.txt             # Archivo de estado (generado automáticamente)
-├── conversations/         # Estado de conversaciones (generado automáticamente)
-├── audio/                # Archivos de audio generados
-└── chatlog-*.txt         # Historial de conversaciones por usuario
-```
-
-## Monitoreo
-
-- **Estado completo**: `cat status.txt`
-- **Estado de conversaciones**: GET `/conversations/status`
-- **Logs del servidor**: Revisar salida de consola
-- **Archivos de estado**: Directorio `conversations/`
-- **Historial de chat**: Archivos `chatlog-*.txt`
+Para soporte técnico o preguntas sobre el sistema, consultar la documentación en `docs/` o contactar al equipo de desarrollo. 
