@@ -294,7 +294,7 @@ def schedule_call(number: str, name: str):
         
         # Obtener resultado del saludo (con timeout)
         try:
-            greeting_url = greeting_future.result(timeout=5)
+            greeting_url = greeting_future.result(timeout=10)  # Aumentar timeout
         except Exception as e:
             print(f"⚠️ Timeout generando saludo: {e}")
             greeting_url = None
@@ -387,30 +387,42 @@ def generate_speech_elevenlabs(text, output_file):
             }
         )
         
-        # Guardar directamente como WAV para evitar conversiones
-        temp_file = output_file + ".temp.wav"
+        # Guardar audio temporal (puede ser MP3 o WAV)
+        temp_file = output_file + ".temp"
         with open(temp_file, "wb") as f:
             for chunk in audio:
                 f.write(chunk)
         
         try:
-            # Cargar y optimizar audio
-            audio_segment = AudioSegment.from_wav(temp_file)
+            # Intentar detectar el formato automáticamente
+            audio_segment = AudioSegment.from_file(temp_file)
             
-            # Optimizar para Twilio: 8kHz mono, compresión
+            # Optimizar para Twilio: 8kHz mono
             audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
             
             # Aplicar normalización para mejor calidad
             audio_segment = audio_segment.normalize()
             
-            # Exportar optimizado
-            audio_segment.export(output_file, format="wav", parameters=["-q:a", "0"])
+            # Exportar como WAV optimizado
+            audio_segment.export(output_file, format="wav")
             
         except Exception as e:
             print(f"Error procesando audio: {e}")
-            # Fallback: copiar archivo temporal
-            import shutil
-            shutil.copy2(temp_file, output_file)
+            # Fallback: intentar con ffmpeg directamente
+            try:
+                import subprocess
+                subprocess.run([
+                    'ffmpeg', '-i', temp_file, 
+                    '-ar', '8000', '-ac', '1', 
+                    '-acodec', 'pcm_s16le', 
+                    output_file
+                ], check=True, capture_output=True)
+                print(f"✅ Audio convertido con ffmpeg: {output_file}")
+            except Exception as ffmpeg_error:
+                print(f"Error con ffmpeg: {ffmpeg_error}")
+                # Último fallback: copiar archivo temporal
+                import shutil
+                shutil.copy2(temp_file, output_file)
         
         # Limpiar archivo temporal
         if os.path.exists(temp_file):
@@ -421,7 +433,7 @@ def generate_speech_elevenlabs(text, output_file):
     except Exception as e:
         print(f"Error generando audio con ElevenLabs: {e}")
         # Limpiar archivo temporal si existe
-        temp_file = output_file + ".temp.wav"
+        temp_file = output_file + ".temp"
         if os.path.exists(temp_file):
             os.remove(temp_file)
         return False
@@ -473,7 +485,27 @@ def generate_audio_chunk(text_chunk: str, number: str) -> str:
     
     if generate_speech_elevenlabs(text_chunk.strip(), audio_filename):
         return audio_filename
-    return None
+    
+    # Fallback: crear archivo de audio simple
+    try:
+        import wave
+        import struct
+        
+        # Crear un archivo WAV simple con silencio
+        with wave.open(audio_filename, 'w') as wav_file:
+            wav_file.setnchannels(1)  # Mono
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(8000)  # 8kHz
+            
+            # Generar 1 segundo de silencio
+            silence = struct.pack('<h', 0) * 8000
+            wav_file.writeframes(silence)
+        
+        print(f"⚠️ Usando fallback de audio para: {text_chunk[:30]}...")
+        return audio_filename
+    except Exception as e:
+        print(f"Error creando fallback de audio: {e}")
+        return None
 
 def process_ai_stream_async(history: List[Dict], number: str, transcript_data: Dict):
     """Procesa el streaming de IA y genera audio en paralelo"""
