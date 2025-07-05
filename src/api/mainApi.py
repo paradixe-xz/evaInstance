@@ -960,46 +960,38 @@ async def handle_speech(request: Request):
         # Ejecutar en thread pool
         future = audio_executor.submit(run_streaming)
         
-        # Esperar un poco para que empiece a generar audio
-        time.sleep(0.5)
-        
-        # Verificar si hay audio disponible en la cola
-        audio_queue = get_audio_queue(user_number)
-        audio_chunks = []
-        
-        # Esperar hasta 3 segundos para el primer chunk de audio
-        start_time = time.time()
-        while time.time() - start_time < 3:
-            try:
-                audio_chunk = audio_queue.get(timeout=0.1)
-                audio_chunks.append(audio_chunk)
-                print(f"🎵 Audio chunk generado: {audio_chunk['file']}")
-                break
-            except queue.Empty:
-                continue
-        
-        # Si no hay audio después de 3 segundos, usar fallback
-        if not audio_chunks:
-            print("⚠️ No se generó audio en tiempo, usando fallback")
-            ai_reply = "Lo siento, hubo un error procesando tu mensaje."
-            response = VoiceResponse()
-            response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
-        else:
-            # Construir respuesta con chunks de audio
+        # Esperar a que se complete todo el streaming de audio
+        print(f"⏳ Esperando a que se complete el streaming de audio para {user_number}...")
+        try:
+            ai_reply, all_audio_files = future.result(timeout=30)  # Aumentar timeout a 30 segundos
+            print(f"✅ Streaming completado: {len(all_audio_files)} archivos de audio")
+            
+            # Construir respuesta con todos los chunks de audio
             response = VoiceResponse()
             
-            # Reproducir chunks de audio disponibles
+            # Obtener todos los chunks de la cola
+            audio_queue = get_audio_queue(user_number)
+            audio_chunks = []
+            
+            # Recoger todos los chunks disponibles
+            while not audio_queue.empty():
+                try:
+                    audio_chunk = audio_queue.get_nowait()
+                    audio_chunks.append(audio_chunk)
+                    print(f"🎵 Audio chunk listo: {audio_chunk['file']}")
+                except queue.Empty:
+                    break
+            
+            # Reproducir todos los chunks de audio en orden
             for chunk in audio_chunks:
                 response.play(chunk['url'])
                 print(f"🎤 Reproduciendo: {chunk['text'][:50]}...")
-            
-            # Obtener respuesta completa del streaming
-            try:
-                ai_reply, all_audio_files = future.result(timeout=10)
-                print(f"✅ Streaming completado: {len(all_audio_files)} archivos de audio")
-            except Exception as e:
-                print(f"❌ Error en streaming: {e}")
-                ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+                
+        except Exception as e:
+            print(f"❌ Error en streaming: {e}")
+            ai_reply = "Lo siento, hubo un error procesando tu mensaje."
+            response = VoiceResponse()
+            response.say("Lo siento, hubo un error generando la respuesta.", language="es-ES")
         
     except Exception as e:
         print(f"Error en streaming de IA: {e}")
