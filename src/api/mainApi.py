@@ -259,11 +259,9 @@ def schedule_call(number: str, name: str):
         
         # Generar saludo personalizado ANTES de la llamada en paralelo
         greeting_text = (
-            f"Alo {name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
+            f"¡Alo {name}! ¿Cómo estás? Soy Ana de AVANZA. "
+            f"Te llamo para ayudarte con tus finanzas. ¿Tienes 5 minutos? "
+            f"Tenemos préstamos desde 1.6% mensual por libranza."
         )
         greeting_filename = f"audio/greeting_{number.replace('+', '').replace('-', '')}_{uuid.uuid4()}.wav"
         
@@ -839,21 +837,17 @@ async def twilio_voice(request: Request):
         print(f"🎤 Usando saludo pre-generado: {greeting_audio_url}")
         response.play(greeting_audio_url)
         greeting_text = (
-            f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
+            f"Hola {user_name}! ¿Cómo estás? Soy Ana de AVANZA. "
+            f"Te llamo para ayudarte con tus finanzas. ¿Tienes 5 minutos? "
+            f"Tenemos préstamos desde 1.6% mensual por libranza."
         )
     else:
         print("⚠️ No se encontró saludo pre-generado o hubo error, generando uno nuevo...")
         # Generar saludo personalizado con ElevenLabs siguiendo el guion de 10 minutos
         greeting_text = (
-            f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-            f"Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-            f"Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-            f"que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-            f"Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año."
+            f"Hola {user_name}! ¿Cómo estás? Soy Ana de AVANZA. "
+            f"Te llamo para ayudarte con tus finanzas. ¿Tienes 5 minutos? "
+            f"Tenemos préstamos desde 1.6% mensual por libranza."
         )
         greeting_filename = f"audio/greeting_{uuid.uuid4()}.wav"
         
@@ -864,11 +858,9 @@ async def twilio_voice(request: Request):
         else:
             print("Error generando saludo, usando fallback")
             response.say(
-                f"¡Alóoo {user_name}! ¿Cómo estás mi cielo? ¡Qué alegría saludarte! "
-                "Soy Ana tu asesora financiera de AVANZA y antes que nada gracias por responder nuestro mensajito. "
-                "Hoy no te estoy llamando para venderte un crédito —te lo prometo— sino para ayudarte a organizar tus finanzas "
-                "que es algo que todos necesitamos hoy en día ¿verdad? ¿Te agarré en un momento tranquilo? "
-                "Esto no toma más de 10 minuticos pero créeme pueden cambiar tu año.",
+                f"¡Alo {user_name}! ¿Cómo estás? Soy Ana de AVANZA. "
+                "Te llamo para ayudarte con tus finanzas. ¿Tienes 5 minutos? "
+                "Tenemos préstamos desde 1.6% mensual por libranza.",
                 language="es-ES"
             )
     
