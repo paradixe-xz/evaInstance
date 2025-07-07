@@ -195,7 +195,7 @@ def get_scheduler_jobs():
     try:
         # Intentar obtener trabajos del scheduler (si está corriendo)
         import requests
-        response = requests.get("http://localhost:8000/conversations/status", timeout=2)
+        response = requests.get("http://localhost:4000/conversations/status", timeout=2)
         if response.status_code == 200:
             data = response.json()
             return data.get("total_conversations", 0)
