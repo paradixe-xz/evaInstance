@@ -439,8 +439,6 @@ def send_documents_email(to_email: str, cedula_file: str, recibo_file: str, cust
         print(f"Error enviando email: {e}")
         return {"error": str(e)}
 
-def create_whatsapp_form_message(stage: str, name: str = "") -> str:
-
 def process_whatsapp_business_message(user_message: str, user_number: str, user_name: str = "") -> str:
     """Procesa mensaje de WhatsApp Business y retorna respuesta"""
     try:
