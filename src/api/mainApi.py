@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
@@ -1575,6 +1575,19 @@ async def send_whatsapp_business_endpoint(request: Request):
             
     except Exception as e:
         return {"error": f"Error: {str(e)}"}
+
+@app.get("/whatsapp/business/webhook")
+async def verify_whatsapp_webhook(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token")
+):
+    """Verificación inicial del webhook de WhatsApp Business (GET)"""
+    challenge = whatsapp_business.verify_webhook(hub_mode, hub_verify_token, hub_challenge)
+    if challenge:
+        return PlainTextResponse(challenge)
+    else:
+        return PlainTextResponse("Forbidden", status_code=403)
 
 @app.post("/whatsapp/business/webhook")
 async def whatsapp_business_webhook(request: Request):
