@@ -425,7 +425,7 @@ def send_documents_email(to_email: str, cedula_file: str, recibo_file: str, cust
     try:
         # Aquí implementarías el envío de correo
         # Por ahora solo simulamos
-        print(f"📧 Enviando documentos por email a {to_email}")
+        print(f"\U0001F4E7 Enviando documentos por email a {to_email}")
         print(f"   Cliente: {customer_name}")
         print(f"   Cédula: {cedula_file}")
         print(f"   Recibo: {recibo_file}")
