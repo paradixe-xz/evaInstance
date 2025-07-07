@@ -1359,47 +1359,40 @@ async def send_numbers(file: UploadFile = File(...)):
                     })
                     continue
                 
-                # 1. ENVIAR MENSAJE DE WHATSAPP PRIMERO
+                # 1. ENVIAR MENSAJE DE WHATSAPP SOLAMENTE
                 whatsapp_message = create_whatsapp_form_message("initial", nombre)
+                print(f"\U0001F4F2 Enviando WhatsApp a {numero} (nombre: {nombre}):\n{whatsapp_message}\n")
                 whatsapp_result = send_whatsapp_business_message(numero, whatsapp_message, nombre)
                 
-                # 2. PROGRAMAR LLAMADA TELEFÓNICA
-                call_sid = schedule_call(numero, nombre)
+                # NO programar llamada aquí
+                # call_sid = schedule_call(numero, nombre)
                 
                 # Crear resultado combinado
                 contact_result = {
-                        "numero": numero,
-                        "nombre": nombre,
+                    "numero": numero,
+                    "nombre": nombre,
                     "whatsapp_sent": whatsapp_result.get("status") == "success",
                     "whatsapp_message_id": whatsapp_result.get("message_id"),
-                    "call_scheduled": call_sid is not None,
-                        "call_sid": call_sid
+                    "call_scheduled": False,
+                    "call_sid": None
                 }
                 
-                if whatsapp_result.get("status") == "success" or call_sid:
+                if whatsapp_result.get("status") == "success":
                     valid_contacts.append(contact_result)
-                    
-                    # Determinar status principal
-                    if whatsapp_result.get("status") == "success" and call_sid:
-                        status = "whatsapp_y_llamada_programados"
-                    elif whatsapp_result.get("status") == "success":
-                        status = "whatsapp_enviado"
-                    else:
-                        status = "llamada_programada"
-                    
+                    status = "whatsapp_enviado"
                     results.append({
                         "numero": numero,
                         "nombre": nombre,
                         "status": status,
                         "whatsapp_message_id": whatsapp_result.get("message_id"),
-                        "call_sid": call_sid
+                        "call_sid": None
                     })
                 else:
                     invalid_numbers.append({
                         "row": index + 1,
                         "numero": numero,
                         "nombre": nombre,
-                        "error": "Error enviando WhatsApp y programando llamada"
+                        "error": "Error enviando WhatsApp"
                     })
                 
                 # Pausa entre contactos para evitar rate limits
