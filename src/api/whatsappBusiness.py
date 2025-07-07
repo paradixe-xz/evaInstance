@@ -61,6 +61,9 @@ class WhatsAppBusinessAPI:
             response = requests.post(url, headers=headers, json=data)
             result = response.json()
             
+            # Agregar print para depuración
+            print(f"[DEBUG] Respuesta completa de WhatsApp API para {to_number}: {json.dumps(result, ensure_ascii=False)}")
+            
             if response.status_code == 200:
                 logger.info(f"✅ Mensaje WhatsApp enviado: {result.get('messages', [{}])[0].get('id')}")
                 return {
