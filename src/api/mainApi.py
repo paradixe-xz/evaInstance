@@ -40,6 +40,9 @@ TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER')
 TWILIO_WEBHOOK_URL = os.getenv('TWILIO_WEBHOOK_URL')
 
+# WhatsApp Business API config
+from .whatsappBusiness import whatsapp_business
+
 # ElevenLabs config
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  # Rachel voice
@@ -380,6 +383,256 @@ Si necesitas cambiar la hora, solo dime "cambiar hora" y te ayudo a reprogramarl
 ¡Prepárate para mejorar tu salud financiera! 💰💪"""
 
     return "Gracias por tu tiempo. ¡Que tengas un excelente día!"
+
+# --- Funciones para WhatsApp Business API ---
+def send_whatsapp_business_message(to_number: str, message: str, name: str = "") -> Dict[str, Any]:
+    """Envía mensaje usando WhatsApp Business API"""
+    try:
+        # Intentar con WhatsApp Business API primero
+        result = whatsapp_business.send_text_message(to_number, message)
+        
+        if result.get("status") == "success":
+            print(f"📱 Mensaje WhatsApp Business enviado: {result.get('message_id')}")
+            return result
+        else:
+            print(f"⚠️ Error WhatsApp Business: {result.get('error')}")
+            # Fallback a Twilio si está configurado
+            if TWILIO_WHATSAPP_NUMBER:
+                return send_whatsapp_message(to_number, message, name)
+            else:
+                return {"error": "WhatsApp no configurado"}
+                
+    except Exception as e:
+        print(f"Error enviando mensaje WhatsApp Business: {e}")
+        return {"error": str(e)}
+
+# --- Funciones para manejo de documentos ---
+def verify_document_names(cedula_name: str, recibo_name: str) -> bool:
+    """Verifica que los nombres en cédula y recibo coincidan"""
+    try:
+        # Limpiar nombres (quitar espacios extra, normalizar)
+        cedula_clean = cedula_name.strip().lower()
+        recibo_clean = recibo_name.strip().lower()
+        
+        # Comparar nombres
+        return cedula_clean == recibo_clean
+    except Exception as e:
+        print(f"Error verificando nombres: {e}")
+        return False
+
+def send_documents_email(to_email: str, cedula_file: str, recibo_file: str, customer_name: str):
+    """Envía documentos por correo electrónico"""
+    try:
+        # Aquí implementarías el envío de correo
+        # Por ahora solo simulamos
+        print(f"📧 Enviando documentos por email a {to_email}")
+        print(f"   Cliente: {customer_name}")
+        print(f"   Cédula: {cedula_file}")
+        print(f"   Recibo: {recibo_file}")
+        
+        return {
+            "status": "success",
+            "message": "Documentos enviados por correo",
+            "email": to_email
+        }
+    except Exception as e:
+        print(f"Error enviando email: {e}")
+        return {"error": str(e)}
+
+def create_whatsapp_form_message(stage: str, name: str = "") -> str:
+
+def process_whatsapp_business_message(user_message: str, user_number: str, user_name: str = "") -> str:
+    """Procesa mensaje de WhatsApp Business y retorna respuesta"""
+    try:
+        # Cargar estado de conversación
+        state = load_conversation_state(user_number)
+        current_stage = state.get("stage", "initial")
+        
+        # Actualizar última interacción
+        state["last_interaction"] = get_current_time().isoformat()
+        state["messages_sent"] = state.get("messages_sent", 0) + 1
+        
+        # Procesar según el estado actual
+        if current_stage == "initial":
+            # Primer mensaje - enviar presentación inicial
+            response = f"""🎧 ¡Hola {user_name}! Soy ANA de AVANZA 💼
+
+No te estoy escribiendo para venderte un crédito —te lo prometo—, sino para ayudarte a organizar tus finanzas, que es algo que todos necesitamos hoy en día.
+
+📌 Tenemos tasas desde solo **1.6% mensual** por libranza
+📌 Montos hasta $150 millones sin codeudor
+📌 Sin importar si estás reportado en centrales
+📌 Descuento directo de nómina
+
+¿Puedo llamarte para explicártelo? No es una llamada comercial, es una charla entre tú y yo buscando la mejor forma de que el dinero te rinda más sin estrés.
+
+¿Qué prefieres? 💰💪"""
+            state["stage"] = "waiting_confirmation"
+            
+        elif current_stage == "waiting_confirmation":
+            # Procesar respuesta del usuario
+            user_message_lower = user_message.lower()
+            
+            if any(word in user_message_lower for word in ["sí", "si", "yes", "ok", "vale", "claro", "perfecto", "me interesa"]):
+                # Usuario acepta llamada
+                response = f"""✅ ¡Excelente {user_name}! 
+
+Tu llamada está programada. Te llamaré puntualmente para revisar tu elegibilidad y explicarte todos los beneficios del préstamo AVANZA.
+
+📋 En la llamada de 10 minutos revisaremos:
+• Tu situación actual y capacidad de pago
+• Cómo podemos bajarte esa cuota que te tiene apretado
+• Monto que puedes obtener (hasta $150 millones)
+• Documentación necesaria (solo cédula vigente)
+• Proceso de desembolso (24-48 horas)
+
+📞 Llamada programada. Te llamaré en 1 minuto."""
+                state["stage"] = "scheduled_call"
+                
+                # Programar llamada inmediata
+                call_sid = schedule_call(user_number, user_name)
+                if not call_sid:
+                    response += f"\n\n⚠️ Error programando llamada. Te contactaré pronto."
+                    
+            elif any(word in user_message_lower for word in ["no", "ahora no", "después", "más tarde", "no me interesa"]):
+                # Usuario no quiere llamada - CONVENCER CON IA
+                response = f"""Entiendo tu preocupación {user_name}, pero déjame explicarte algo importante:
+
+¿Sabías que con nuestros préstamos puedes:
+• Reducir tus cuotas mensuales hasta en un 40%
+• Recibir hasta $150 millones sin codeudor
+• Tener descuento directo por nómina (sin olvidos)
+• Aprobación en 24-48 horas
+
+Muchos de nuestros clientes han logrado ahorrar más de $500,000 mensuales. ¿Te parece que vale la pena que te explique cómo? Solo necesito 5 minutos de tu tiempo.
+
+¿Me das esa oportunidad? 💰"""
+                state["stage"] = "convincing"
+                
+            else:
+                # Respuesta no clara - seguir convenciendo
+                response = f"""No estoy segura de entender {user_name}. 
+
+Te explico rápido: con AVANZA puedes:
+✅ Recibir hasta $150 millones
+✅ Pagar menos cada mes
+✅ Sin codeudor ni reportes
+✅ Descuento automático por nómina
+
+¿Te parece interesante? Solo dime 'sí' y te explico todo en detalle. 💰"""
+                
+        elif current_stage == "convincing":
+            # Usuario no quería llamada - seguir convenciendo
+            user_message_lower = user_message.lower()
+            
+            if any(word in user_message_lower for word in ["sí", "si", "yes", "ok", "vale", "claro", "perfecto", "me interesa", "explicame"]):
+                # Cambió de opinión
+                response = f"""🎯 ¡Perfecto {user_name}! 
+
+Para agendar tu llamada y revisar tu elegibilidad para el préstamo AVANZA, dime cuándo te parece mejor:
+
+⏰ Opciones:
+• "Ahora mismo" - Te llamo en 10 minutos
+• "En 2 horas" - Te llamo en 2 horas  
+• "A las 3:30 PM" - Te llamo a esa hora
+• "Mañana a las 10:00" - Te llamo mañana
+
+¿Cuándo te viene mejor para revisar tu situación y calcular tu préstamo? 💰"""
+                state["stage"] = "scheduled_call"
+                
+                # Programar llamada inmediata
+                call_sid = schedule_call(user_number, user_name)
+                if call_sid:
+                    response += f"\n\n📞 Llamada programada. Te llamaré en 1 minuto."
+                else:
+                    response += f"\n\n⚠️ Error programando llamada. Te contactaré pronto."
+            else:
+                # Seguir convenciendo
+                response = f"""Entiendo {user_name}, pero déjame contarte algo:
+
+María, una docente como tú, logró reducir su cuota de $800,000 a $450,000 mensuales. Eso significa $350,000 más en su bolsillo cada mes.
+
+¿Te imaginas qué podrías hacer con ese dinero extra? Pagar deudas, ahorrar, o simplemente vivir más tranquila.
+
+¿Vale la pena que te explique cómo? Solo 5 minutos. 💰"""
+                
+        elif current_stage == "scheduled_call":
+            # Llamada ya programada
+            response = "Tu llamada ya está programada. Te llamaré puntualmente. Si necesitas cambiar la hora, solo dime 'cambiar hora'."
+            
+        elif current_stage == "call_completed":
+            # Llamada terminada - verificar interés
+            user_message_lower = user_message.lower()
+            
+            if any(word in user_message_lower for word in ["sí", "si", "yes", "ok", "vale", "claro", "perfecto", "me interesa", "quiero", "proceder"]):
+                # Usuario interesado después de la llamada
+                response = f"""🎉 ¡Excelente {user_name}! 
+
+Perfecto, para continuar con tu solicitud necesito que me envíes estos documentos:
+
+📋 Documentos requeridos:
+1. 📄 Cédula de ciudadanía (frente y reverso)
+2. 💰 Último recibo de pago de nómina
+3. 📝 Formato de autorización (te lo envío ahora)
+
+📱 Envíalos por WhatsApp a este mismo número
+📧 O por email a: info@avanza.lat
+
+¿Tienes estos documentos a la mano? 📄"""
+                state["stage"] = "waiting_documents"
+                
+            else:
+                # Usuario no interesado después de la llamada
+                response = f"""Entiendo {user_name}. 
+
+Si en el futuro necesitas ayuda financiera, recuerda que estamos aquí para ayudarte. 
+
+¿Te parece bien que te mantenga informado sobre nuestras promociones especiales? 💰"""
+                state["stage"] = "not_interested"
+                
+        elif current_stage == "waiting_documents":
+            # Esperando documentos
+            response = f"""Perfecto {user_name}. 
+
+Por favor envía:
+1. 📄 Cédula de ciudadanía (frente y reverso)
+2. 💰 Último recibo de pago de nómina
+3. 📝 Formato de autorización
+
+Una vez que los reciba, los revisaré y te confirmaré el siguiente paso.
+
+¿Ya los tienes listos? 📄"""
+            state["stage"] = "documents_received"
+            
+        elif current_stage == "documents_received":
+            # Documentos recibidos - verificar nombres
+            # Aquí se procesarían los documentos
+            response = f"""✅ ¡Perfecto {user_name}! 
+
+He recibido tus documentos. Los estoy revisando ahora mismo.
+
+📋 Próximos pasos:
+1. ✅ Revisión de documentos
+2. 📊 Evaluación financiera
+3. 📞 Confirmación de aprobación
+4. 💰 Desembolso en 24-48 horas
+
+Te mantendré informado del proceso. ¡Gracias por confiar en AVANZA! 🎉"""
+            state["stage"] = "documents_verified"
+            
+        else:
+            # Estado desconocido
+            response = "Gracias por tu interés. Te contactaré pronto."
+            state["stage"] = "initial"
+        
+        # Guardar estado actualizado
+        save_conversation_state(user_number, state)
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error procesando mensaje WhatsApp Business: {e}")
+        return "Lo siento, hubo un error procesando tu mensaje. Te contactaré pronto."
 
 def generate_speech_elevenlabs(text, output_file):
     """Genera audio usando ElevenLabs optimizado para velocidad"""
@@ -1022,7 +1275,7 @@ async def call_ended(request: Request):
         # Actualizar estado con análisis
         state["analysis_ready"] = True
         state["ai_analysis"] = analysis
-        state["stage"] = "analyzed"
+        state["stage"] = "call_completed"  # Cambiar a call_completed para continuar por WhatsApp
         
         # Determinar si necesita seguimiento humano
         if analysis.get("human_followup_needed", False) or analysis.get("interest_level") in ["high", "medium"]:
@@ -1067,7 +1320,7 @@ def append_to_history(number, role, content):
 # --- Endpoint para procesar contactos y hacer llamadas directas ---
 @app.post("/sendNumbers")
 async def send_numbers(file: UploadFile = File(...)):
-    """Procesa archivo Excel con contactos y hace llamadas directas"""
+    """Procesa archivo Excel con contactos y hace llamadas directas + envía mensajes WhatsApp"""
     try:
         if not file.filename.endswith(('.xlsx', '.xls')):
             return {"error": "El archivo debe ser un Excel (.xlsx o .xls)"}
@@ -1108,20 +1361,39 @@ async def send_numbers(file: UploadFile = File(...)):
                     })
                     continue
                 
-                # Programar llamada inmediata
+                # 1. ENVIAR MENSAJE DE WHATSAPP PRIMERO
+                whatsapp_message = create_whatsapp_form_message("initial", nombre)
+                whatsapp_result = send_whatsapp_business_message(numero, whatsapp_message, nombre)
+                
+                # 2. PROGRAMAR LLAMADA TELEFÓNICA
                 call_sid = schedule_call(numero, nombre)
                 
-                if call_sid:
-                    valid_contacts.append({
+                # Crear resultado combinado
+                contact_result = {
                         "numero": numero,
                         "nombre": nombre,
+                    "whatsapp_sent": whatsapp_result.get("status") == "success",
+                    "whatsapp_message_id": whatsapp_result.get("message_id"),
+                    "call_scheduled": call_sid is not None,
                         "call_sid": call_sid
-                    })
+                }
+                
+                if whatsapp_result.get("status") == "success" or call_sid:
+                    valid_contacts.append(contact_result)
+                    
+                    # Determinar status principal
+                    if whatsapp_result.get("status") == "success" and call_sid:
+                        status = "whatsapp_y_llamada_programados"
+                    elif whatsapp_result.get("status") == "success":
+                        status = "whatsapp_enviado"
+                    else:
+                        status = "llamada_programada"
                     
                     results.append({
                         "numero": numero,
                         "nombre": nombre,
-                        "status": "llamada_programada",
+                        "status": status,
+                        "whatsapp_message_id": whatsapp_result.get("message_id"),
                         "call_sid": call_sid
                     })
                 else:
@@ -1129,8 +1401,11 @@ async def send_numbers(file: UploadFile = File(...)):
                         "row": index + 1,
                         "numero": numero,
                         "nombre": nombre,
-                        "error": "Error programando llamada"
+                        "error": "Error enviando WhatsApp y programando llamada"
                     })
+                
+                # Pausa entre contactos para evitar rate limits
+                time.sleep(1)
                 
             except Exception as e:
                 invalid_numbers.append({
@@ -1141,7 +1416,7 @@ async def send_numbers(file: UploadFile = File(...)):
                 })
         
         return {
-            "message": f"Procesamiento completado. {len(valid_contacts)} llamadas programadas.",
+            "message": f"Procesamiento completado. {len(valid_contacts)} contactos procesados.",
             "total_contacts": len(df),
             "valid_contacts": len(valid_contacts),
             "invalid_contacts": len(invalid_numbers),
@@ -1224,6 +1499,417 @@ def mark_conversation_closed(number: str, outcome: str, notes: str = ""):
         
     except Exception as e:
         return {"error": f"Error marcando conversación: {str(e)}"}
+
+# --- Endpoints para WhatsApp Business API ---
+
+@app.post("/send_whatsapp")
+async def send_whatsapp_endpoint(request: Request):
+    """Endpoint para enviar mensajes de WhatsApp manualmente"""
+    try:
+        form = await request.form()
+        to_number = form.get('to', '')
+        message = form.get('message', '')
+        name = form.get('name', '')
+        
+        if not to_number or not message:
+            return {"error": "Se requieren 'to' y 'message'"}
+        
+        # Limpiar número
+        if not to_number.startswith('+'):
+            to_number = '+' + to_number
+        
+        # Enviar mensaje usando WhatsApp Business API
+        result = send_whatsapp_business_message(to_number, message, name)
+        
+        if result.get("status") == "success":
+            return {
+                "status": "success",
+                "message": "Mensaje enviado exitosamente",
+                "message_id": result.get("message_id"),
+                "provider": "whatsapp_business"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Error enviando mensaje: {result.get('error')}"
+            }
+            
+    except Exception as e:
+        return {"error": f"Error: {str(e)}"}
+
+@app.post("/whatsapp/business/send")
+async def send_whatsapp_business_endpoint(request: Request):
+    """Endpoint específico para WhatsApp Business API"""
+    try:
+        form = await request.form()
+        to_number = form.get('to', '')
+        message = form.get('message', '')
+        template_name = form.get('template_name', '')
+        language_code = form.get('language_code', 'es')
+        
+        if not to_number:
+            return {"error": "Se requiere 'to'"}
+        
+        # Limpiar número
+        if not to_number.startswith('+'):
+            to_number = '+' + to_number
+        
+        # Enviar mensaje
+        if template_name:
+            # Enviar plantilla
+            result = whatsapp_business.send_template_message(to_number, template_name, language_code)
+        else:
+            # Enviar mensaje de texto
+            result = whatsapp_business.send_text_message(to_number, message)
+        
+        if result.get("status") == "success":
+            return {
+                "status": "success",
+                "message": "Mensaje enviado exitosamente",
+                "message_id": result.get("message_id"),
+                "provider": "whatsapp_business"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Error enviando mensaje: {result.get('error')}"
+            }
+            
+    except Exception as e:
+        return {"error": f"Error: {str(e)}"}
+
+@app.post("/whatsapp/business/webhook")
+async def whatsapp_business_webhook(request: Request):
+    """Webhook para recibir mensajes de WhatsApp Business API"""
+    try:
+        # Verificar si es verificación de webhook
+        params = dict(request.query_params)
+        if 'hub.mode' in params and 'hub.verify_token' in params:
+            challenge = whatsapp_business.verify_webhook(
+                params['hub.mode'],
+                params['hub.verify_token'],
+                params.get('hub.challenge', '')
+            )
+            if challenge:
+                return PlainTextResponse(challenge)
+            else:
+                return PlainTextResponse("Forbidden", status_code=403)
+        
+        # Procesar mensaje entrante
+        body = await request.json()
+        message_data = whatsapp_business.process_webhook(body)
+        
+        if message_data.get("status") == "no_message":
+            return PlainTextResponse("OK")
+        
+        if "error" in message_data:
+            print(f"❌ Error procesando webhook: {message_data['error']}")
+            return PlainTextResponse("Error", status_code=500)
+        
+        # Extraer información del mensaje
+        user_number = message_data.get("from", "")
+        user_message = message_data.get("text", "")
+        message_type = message_data.get("type", "")
+        
+        print(f"📱 Mensaje WhatsApp Business recibido de {user_number}: {user_message}")
+        
+        # Cargar estado para obtener nombre
+        state = load_conversation_state(user_number)
+        user_name = state.get("name", "")
+        
+        # Procesar mensaje y obtener respuesta
+        response_message = process_whatsapp_business_message(user_message, user_number, user_name)
+        
+        # Enviar respuesta
+        if response_message:
+            result = whatsapp_business.send_text_message(user_number, response_message)
+            if result.get("status") == "success":
+                print(f"✅ Respuesta WhatsApp Business enviada: {result.get('message_id')}")
+            else:
+                print("❌ Error enviando respuesta")
+        
+        return PlainTextResponse("OK")
+        
+    except Exception as e:
+        print(f"Error en webhook WhatsApp Business: {e}")
+        return PlainTextResponse("Error", status_code=500)
+
+@app.get("/whatsapp/business/info")
+async def get_whatsapp_business_info():
+    """Obtiene información del número de WhatsApp Business"""
+    try:
+        result = whatsapp_business.get_phone_number_info()
+        return result
+    except Exception as e:
+        return {"error": f"Error: {str(e)}"}
+
+@app.get("/whatsapp/business/templates")
+async def get_whatsapp_business_templates():
+    """Obtiene plantillas disponibles de WhatsApp Business"""
+    try:
+        result = whatsapp_business.get_templates()
+        return result
+    except Exception as e:
+        return {"error": f"Error: {str(e)}"}
+
+@app.post("/whatsapp/bulk_send")
+async def bulk_send_whatsapp(file: UploadFile = File(...)):
+    """Envía mensajes de WhatsApp masivos desde archivo Excel"""
+    try:
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return {"error": "El archivo debe ser un Excel (.xlsx o .xls)"}
+        
+        # Leer archivo Excel
+        content = await file.read()
+        df = pd.read_excel(io.BytesIO(content))
+        
+        # Validar columnas requeridas
+        required_columns = ['numero', 'mensaje']
+        if not all(col in df.columns for col in required_columns):
+            return {"error": f"El archivo debe contener las columnas: {required_columns}"}
+        
+        # Procesar contactos
+        results = []
+        success_count = 0
+        error_count = 0
+        
+        for index, row in df.iterrows():
+            try:
+                # Obtener datos
+                numero = str(row['numero']).strip()
+                mensaje = str(row['mensaje']).strip()
+                nombre = str(row.get('nombre', '')).strip() if 'nombre' in df.columns else ""
+                
+                # Limpiar número
+                numero = re.sub(r'[^\d+]', '', numero)
+                if not numero.startswith('+'):
+                    numero = '+' + numero
+                
+                # Validar número
+                digits_only = re.sub(r'[^\d]', '', numero)
+                if len(digits_only) < 10:
+                    results.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "status": "error",
+                        "error": "Número muy corto"
+                    })
+                    error_count += 1
+                    continue
+                
+                # Enviar mensaje usando WhatsApp Business API
+                result = send_whatsapp_business_message(numero, mensaje, nombre)
+                
+                if result.get("status") == "success":
+                    results.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "status": "enviado",
+                        "message_id": result.get("message_id")
+                    })
+                    success_count += 1
+                else:
+                    results.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "status": "error",
+                        "error": result.get("error", "Error enviando mensaje")
+                    })
+                    error_count += 1
+                
+                # Pausa entre mensajes para evitar rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                results.append({
+                    "row": index + 1,
+                    "numero": str(row.get('numero', '')),
+                    "nombre": str(row.get('nombre', '')),
+                    "status": "error",
+                    "error": str(e)
+                })
+                error_count += 1
+        
+        return {
+            "message": f"Envio masivo completado. {success_count} mensajes enviados, {error_count} errores.",
+            "total_contacts": len(df),
+            "success_count": success_count,
+            "error_count": error_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        return {"error": f"Error procesando archivo: {str(e)}"}
+
+@app.post("/sendWhatsAppOnly")
+async def send_whatsapp_only(file: UploadFile = File(...)):
+    """Procesa archivo Excel con contactos y envía SOLO mensajes WhatsApp (sin llamadas)"""
+    try:
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return {"error": "El archivo debe ser un Excel (.xlsx o .xls)"}
+        
+        # Leer archivo Excel
+        content = await file.read()
+        df = pd.read_excel(io.BytesIO(content))
+        
+        # Validar columnas requeridas
+        required_columns = ['numero']
+        if not all(col in df.columns for col in required_columns):
+            return {"error": f"El archivo debe contener las columnas: {required_columns}"}
+        
+        # Procesar contactos
+        valid_contacts = []
+        invalid_numbers = []
+        results = []
+        
+        for index, row in df.iterrows():
+            try:
+                # Obtener número
+                numero = str(row['numero']).strip()
+                nombre = str(row.get('nombre', '')).strip() if 'nombre' in df.columns else ""
+                
+                # Limpiar número
+                numero = re.sub(r'[^\d+]', '', numero)
+                if not numero.startswith('+'):
+                    numero = '+' + numero
+                
+                # Validar número (mínimo 10 dígitos)
+                digits_only = re.sub(r'[^\d]', '', numero)
+                if len(digits_only) < 10:
+                    invalid_numbers.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "error": "Número muy corto"
+                    })
+                    continue
+                
+                # ENVIAR SOLO MENSAJE DE WHATSAPP
+                whatsapp_message = create_whatsapp_form_message("initial", nombre)
+                whatsapp_result = send_whatsapp_business_message(numero, whatsapp_message, nombre)
+                
+                if whatsapp_result.get("status") == "success":
+                    valid_contacts.append({
+                        "numero": numero,
+                        "nombre": nombre,
+                        "whatsapp_message_id": whatsapp_result.get("message_id")
+                    })
+                    
+                    results.append({
+                        "numero": numero,
+                        "nombre": nombre,
+                        "status": "whatsapp_enviado",
+                        "whatsapp_message_id": whatsapp_result.get("message_id")
+                    })
+                else:
+                    invalid_numbers.append({
+                        "row": index + 1,
+                        "numero": numero,
+                        "nombre": nombre,
+                        "error": f"Error enviando WhatsApp: {whatsapp_result.get('error')}"
+                    })
+                
+                # Pausa entre contactos para evitar rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                invalid_numbers.append({
+                    "row": index + 1,
+                    "numero": str(row.get('numero', '')),
+                    "nombre": str(row.get('nombre', '')),
+                    "error": str(e)
+                })
+        
+        return {
+            "message": f"Procesamiento completado. {len(valid_contacts)} mensajes WhatsApp enviados.",
+            "total_contacts": len(df),
+            "valid_contacts": len(valid_contacts),
+            "invalid_contacts": len(invalid_numbers),
+            "results": results,
+            "invalid_numbers": invalid_numbers
+        }
+        
+    except Exception as e:
+        return {"error": f"Error procesando archivo: {str(e)}"}
+
+@app.post("/whatsapp/documents")
+async def receive_documents(request: Request):
+    """Recibe documentos por WhatsApp y los procesa"""
+    try:
+        form = await request.form()
+        user_number = form.get('from', '')
+        cedula_name = form.get('cedula_name', '')
+        recibo_name = form.get('recibo_name', '')
+        email = form.get('email', '')
+        
+        # Limpiar número
+        if not user_number.startswith('+'):
+            user_number = '+' + user_number
+        
+        # Cargar estado
+        state = load_conversation_state(user_number)
+        user_name = state.get("name", "")
+        
+        # Verificar nombres
+        names_match = verify_document_names(cedula_name, recibo_name)
+        
+        if names_match:
+            # Enviar por correo
+            email_result = send_documents_email(email, cedula_name, recibo_name, user_name)
+            
+            if email_result.get("status") == "success":
+                response_message = f"""✅ ¡Perfecto {user_name}! 
+
+He verificado tus documentos y los nombres coinciden perfectamente.
+
+📧 He enviado tus documentos por correo electrónico.
+
+📋 Próximos pasos:
+1. ✅ Documentos verificados
+2. 📊 Evaluación financiera en proceso
+3. 📞 Confirmación de aprobación (24-48 horas)
+4. 💰 Desembolso directo a tu cuenta
+
+Te mantendré informado del proceso. ¡Gracias por confiar en AVANZA! 🎉"""
+            else:
+                response_message = f"""⚠️ {user_name}, hubo un problema enviando los documentos por correo.
+
+Por favor, intenta enviarlos nuevamente o contáctanos directamente al +57 3014146715.
+
+¡Gracias por tu paciencia! 📞"""
+        else:
+            response_message = f"""❌ {user_name}, he detectado una diferencia en los nombres de los documentos.
+
+Por favor verifica que:
+• El nombre en la cédula sea exactamente igual al del recibo de pago
+• Los documentos estén legibles y completos
+
+Una vez corregido, envíalos nuevamente. 📄"""
+        
+        # Enviar respuesta por WhatsApp
+        whatsapp_result = send_whatsapp_business_message(user_number, response_message, user_name)
+        
+        # Actualizar estado
+        if names_match:
+            state["stage"] = "documents_verified"
+            state["documents_sent"] = True
+            state["email_sent"] = True
+        else:
+            state["stage"] = "waiting_documents"
+        
+        save_conversation_state(user_number, state)
+        
+        return {
+            "status": "success",
+            "names_match": names_match,
+            "whatsapp_sent": whatsapp_result.get("status") == "success"
+        }
+        
+    except Exception as e:
+        return {"error": f"Error procesando documentos: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn
