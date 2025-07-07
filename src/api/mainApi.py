@@ -1359,10 +1359,9 @@ async def send_numbers(file: UploadFile = File(...)):
                     })
                     continue
                 
-                # 1. ENVIAR MENSAJE DE WHATSAPP SOLAMENTE
-                whatsapp_message = create_whatsapp_form_message("initial", nombre)
-                print(f"\U0001F4F2 Enviando WhatsApp a {numero} (nombre: {nombre}):\n{whatsapp_message}\n")
-                whatsapp_result = send_whatsapp_business_message(numero, whatsapp_message, nombre)
+                # 1. ENVIAR MENSAJE DE WHATSAPP SOLAMENTE (ahora como TEMPLATE)
+                print(f"\U0001F4F2 Enviando WhatsApp TEMPLATE a {numero} (nombre: {nombre}), plantilla: hello_world")
+                whatsapp_result = whatsapp_business.send_template_message(numero, "hello_world", language_code="es")
                 
                 # NO programar llamada aquí
                 # call_sid = schedule_call(numero, nombre)
