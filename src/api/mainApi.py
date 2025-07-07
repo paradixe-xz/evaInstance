@@ -1359,9 +1359,20 @@ async def send_numbers(file: UploadFile = File(...)):
                     })
                     continue
                 
-                # 1. ENVIAR MENSAJE DE WHATSAPP SOLAMENTE (ahora como TEMPLATE)
-                print(f"\U0001F4F2 Enviando WhatsApp TEMPLATE a {numero} (nombre: {nombre}), plantilla: hello_world")
-                whatsapp_result = whatsapp_business.send_template_message(numero, "hello_world", language_code="es")
+                # 1. ENVIAR MENSAJE DE WHATSAPP SOLAMENTE (ahora como TEMPLATE personalizada)
+                var1 = nombre if nombre else "John"
+                var2 = str(row.get('evento', 'visit')) if 'evento' in df.columns else "visit"
+                components = [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": var1},
+                            {"type": "text", "text": var2}
+                        ]
+                    }
+                ]
+                print(f"\U0001F4F2 Enviando WhatsApp TEMPLATE a {numero} (nombre: {var1}, evento: {var2}), plantilla: hello_avanza")
+                whatsapp_result = whatsapp_business.send_template_message(numero, "hello_avanza", language_code="en_US", components=components)
                 
                 # NO programar llamada aquí
                 # call_sid = schedule_call(numero, nombre)
