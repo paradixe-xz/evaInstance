@@ -1925,6 +1925,129 @@ Una vez corregido, envíalos nuevamente. 📄"""
     except Exception as e:
         return {"error": f"Error procesando documentos: {str(e)}"}
 
+@app.post("/test-twilio-call")
+async def test_twilio_call(request: Request):
+    """Endpoint para probar llamadas con Twilio"""
+    try:
+        form = await request.form()
+        test_number = form.get('number', '').strip()
+        test_name = form.get('name', 'Usuario de Prueba').strip()
+        
+        if not test_number:
+            return {"error": "Se requiere el parámetro 'number'"}
+        
+        # Limpiar número
+        if not test_number.startswith('+'):
+            test_number = '+' + test_number
+        
+        # Validar número
+        digits_only = re.sub(r'[^\d]', '', test_number)
+        if len(digits_only) < 10:
+            return {"error": "Número muy corto. Mínimo 10 dígitos requeridos."}
+        
+        print(f"📞 Iniciando llamada de prueba a {test_number} ({test_name})")
+        
+        # Verificar configuración de Twilio
+        if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_PHONE_NUMBER:
+            return {
+                "error": "Configuración de Twilio incompleta",
+                "missing": {
+                    "account_sid": not TWILIO_ACCOUNT_SID,
+                    "auth_token": not TWILIO_AUTH_TOKEN,
+                    "phone_number": not TWILIO_PHONE_NUMBER
+                }
+            }
+        
+        # Crear llamada de prueba
+        try:
+            call = client.calls.create(
+                to=test_number,
+                from_=TWILIO_PHONE_NUMBER,
+                url=TWILIO_WEBHOOK_URL,
+                status_callback=f"{PUBLIC_BASE_URL}/twilio/voice/call_ended",
+                status_callback_event=['completed'],
+                status_callback_method='POST'
+            )
+            
+            print(f"✅ Llamada de prueba iniciada: {call.sid}")
+            
+            # Crear estado de conversación para la prueba
+            state = load_conversation_state(test_number)
+            state["stage"] = "test_call"
+            state["name"] = test_name
+            state["call_sid"] = call.sid
+            state["call_started"] = True
+            state["call_status"] = "in_progress"
+            state["test_call"] = True
+            save_conversation_state(test_number, state)
+            
+            return {
+                "status": "success",
+                "message": f"Llamada de prueba iniciada a {test_number}",
+                "call_sid": call.sid,
+                "from_number": TWILIO_PHONE_NUMBER,
+                "to_number": test_number,
+                "webhook_url": TWILIO_WEBHOOK_URL,
+                "twilio_config": {
+                    "account_sid": TWILIO_ACCOUNT_SID[:10] + "..." if TWILIO_ACCOUNT_SID else None,
+                    "phone_number": TWILIO_PHONE_NUMBER,
+                    "webhook_url": TWILIO_WEBHOOK_URL
+                }
+            }
+            
+        except Exception as call_error:
+            print(f"❌ Error creando llamada: {call_error}")
+            return {
+                "status": "error",
+                "message": f"Error creando llamada: {str(call_error)}",
+                "twilio_config": {
+                    "account_sid": TWILIO_ACCOUNT_SID[:10] + "..." if TWILIO_ACCOUNT_SID else None,
+                    "phone_number": TWILIO_PHONE_NUMBER,
+                    "webhook_url": TWILIO_WEBHOOK_URL
+                }
+            }
+            
+    except Exception as e:
+        print(f"Error en test_twilio_call: {e}")
+        return {"error": f"Error: {str(e)}"}
+
+@app.get("/test-twilio-status")
+async def test_twilio_status():
+    """Obtiene el estado de la configuración de Twilio"""
+    try:
+        # Verificar configuración
+        config_status = {
+            "account_sid": bool(TWILIO_ACCOUNT_SID),
+            "auth_token": bool(TWILIO_AUTH_TOKEN),
+            "phone_number": bool(TWILIO_PHONE_NUMBER),
+            "webhook_url": bool(TWILIO_WEBHOOK_URL)
+        }
+        
+        # Intentar obtener información de la cuenta si está configurado
+        account_info = None
+        if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+            try:
+                account = client.api.accounts(TWILIO_ACCOUNT_SID).fetch()
+                account_info = {
+                    "friendly_name": account.friendly_name,
+                    "status": account.status,
+                    "type": account.type,
+                    "date_created": str(account.date_created)
+                }
+            except Exception as e:
+                account_info = {"error": str(e)}
+        
+        return {
+            "twilio_configured": all(config_status.values()),
+            "config_status": config_status,
+            "account_info": account_info,
+            "webhook_url": TWILIO_WEBHOOK_URL,
+            "public_base_url": PUBLIC_BASE_URL
+        }
+        
+    except Exception as e:
+        return {"error": f"Error verificando estado: {str(e)}"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=4000)
