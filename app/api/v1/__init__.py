@@ -3,7 +3,7 @@ API v1 package
 """
 
 from fastapi import APIRouter
-from .endpoints import whatsapp, chat
+from .endpoints import whatsapp, chat, calls
 
 # Create API v1 router
 api_router = APIRouter()
@@ -19,4 +19,10 @@ api_router.include_router(
     chat.router,
     prefix="/chat",
     tags=["Chat"]
+)
+
+api_router.include_router(
+    calls.router,
+    prefix="/calls",
+    tags=["Calls"]
 )

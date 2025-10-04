@@ -6,8 +6,10 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import time
 import uuid
+import os
 
 from .core.config import get_settings
 from .core.logging import get_logger, setup_logging
@@ -263,6 +265,11 @@ async def root():
         "health": "/health"
     }
 
+
+# Mount static files for TTS audio
+tts_directory = "storage/media/tts"
+os.makedirs(tts_directory, exist_ok=True)
+app.mount("/static/tts", StaticFiles(directory=tts_directory), name="tts")
 
 # Include API routes
 app.include_router(
