@@ -1,1 +1,0 @@
-# Sistema ANA - Módulo principal 

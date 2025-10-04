@@ -1,0 +1,24 @@
+{
+  "field": "messages",
+  "value": {
+    "sender": {
+      "id": "12334"
+    },
+    "recipient": {
+      "id": "23245"
+    },
+    "timestamp": "1527459824",
+    "message": {
+      "mid": "test_message_id",
+      "text": "test_message",
+      "commands": [
+        {
+          "name": "command123"
+        },
+        {
+          "name": "command456"
+        }
+      ]
+    }
+  }
+}
