@@ -23,8 +23,8 @@ from .core.exceptions import (
 from .middleware import LoggingMiddleware, AuthMiddleware, RequestValidationMiddleware
 from .api.v1 import api_router
 
-# Setup logging
-setup_logging()
+# Setup logging without console output
+setup_logging(enable_console=False)
 logger = get_logger(__name__)
 
 # Get settings

@@ -20,13 +20,13 @@ if settings.database_url.startswith("sqlite"):
         settings.database_url,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-        echo=settings.debug
+        echo=False  # Disable SQLAlchemy logging
     )
 else:
     # PostgreSQL or other database configuration
     engine = create_engine(
         settings.database_url,
-        echo=settings.debug
+        echo=False  # Disable SQLAlchemy logging
     )
 
 # Create session factory

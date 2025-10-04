@@ -93,8 +93,6 @@ async def receive_webhook(
                             from_number = message.get("from")
                             text_body = message.get("text", {}).get("body", "")
                             
-                            logger.info(f"📩 WhatsApp Business API - Mensaje recibido de {from_number}: {text_body}")
-                            
                             # Process message in background
                             background_tasks.add_task(_process_webhook_message, webhook_data)
                             
@@ -114,7 +112,7 @@ async def receive_webhook(
                 text_body = message_data.get("text", "")
                 message_id = message_data.get("mid", "")
                 
-                logger.info(f"📩 Meta Test Format - Mensaje recibido de {from_id}: {text_body}")
+
                 
                 # Convert Meta test format to WhatsApp Business API format for processing
                 converted_data = {
@@ -156,7 +154,6 @@ async def receive_webhook(
         
         # Check for message_deliveries format
         elif webhook_data.get("field") == "message_deliveries":
-            logger.info("📬 Message delivery notification received")
             return MessageProcessingResponse(
                 status="received",
                 note="Message delivery notification processed"
@@ -164,14 +161,10 @@ async def receive_webhook(
         
         # Check for message_reads format
         elif webhook_data.get("field") == "message_reads":
-            logger.info("👁️ Message read notification received")
             return MessageProcessingResponse(
                 status="received",
                 note="Message read notification processed"
             )
-        
-        # If no messages found, still return success
-        logger.info("📭 Webhook received but no messages to process")
         return MessageProcessingResponse(
             status="received",
             note="Webhook received - no messages to process"
@@ -187,34 +180,9 @@ async def _process_webhook_message(webhook_data: Dict[str, Any]):
     Background task to process webhook message
     """
     try:
-        logger.info("🚀 INICIANDO PROCESAMIENTO DE MENSAJE 🚀")
         result = chat_service.process_incoming_message(webhook_data)
-        logger.info(f"✅ Message processed: {result}")
-        
-        # ENVIAR RESPUESTA AUTOMÁTICA DE DEBUG
-        try:
-            # Extraer número de teléfono del mensaje
-            entry = webhook_data.get("entry", [])
-            if entry:
-                changes = entry[0].get("changes", [])
-                if changes:
-                    value = changes[0].get("value", {})
-                    messages = value.get("messages", [])
-                    if messages:
-                        from_number = messages[0].get("from")
-                        if from_number:
-                            logger.info(f"📤 ENVIANDO RESPUESTA DEBUG A: {from_number}")
-                            # Enviar mensaje de confirmación
-                            debug_response = chat_service.send_message(
-                                phone_number=from_number,
-                                message="🔥 RECIBIDO! Tu mensaje llegó al webhook correctamente. Sistema funcionando! 🔥"
-                            )
-                            logger.info(f"✅ Respuesta debug enviada: {debug_response}")
-        except Exception as debug_error:
-            logger.error(f"❌ Error enviando respuesta debug: {str(debug_error)}")
-            
     except Exception as e:
-        logger.error(f"❌ Background message processing error: {str(e)}")
+        logger.error(f"Background message processing error: {str(e)}")
 
 
 @router.post("/send-message", response_model=SendMessageResponse)
