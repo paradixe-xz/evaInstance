@@ -13,6 +13,49 @@ import venv
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+def install_system_packages():
+    """Install required system packages for Ubuntu/Debian"""
+    print("🔧 Checking system packages...")
+    
+    # Check if we're on Ubuntu/Debian
+    try:
+        result = subprocess.run(["which", "apt"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print("✅ Not a Debian/Ubuntu system, skipping system packages")
+            return True
+    except:
+        print("✅ Cannot detect package manager, skipping system packages")
+        return True
+    
+    # Install python3-venv if needed
+    try:
+        # Check if python3-venv is available
+        result = subprocess.run(["python3", "-m", "venv", "--help"], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            print("✅ python3-venv is available")
+            return True
+    except:
+        pass
+    
+    print("📦 Installing python3-venv...")
+    try:
+        # Update package list
+        subprocess.run(["apt", "update"], check=True, capture_output=True)
+        
+        # Install python3-venv
+        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        subprocess.run(["apt", "install", "-y", f"{python_version}-venv"], check=True)
+        print("✅ python3-venv installed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install python3-venv: {e}")
+        print("   Please run manually: apt install python3-venv")
+        return False
+    except Exception as e:
+        print(f"❌ Error installing system packages: {e}")
+        return False
+
 def create_virtual_environment():
     """Create virtual environment if needed"""
     venv_path = project_root / "venv"
@@ -21,6 +64,10 @@ def create_virtual_environment():
         print("✅ Virtual environment already exists")
         return venv_path
     
+    # Install system packages first
+    if not install_system_packages():
+        print("⚠️  System packages installation failed, trying anyway...")
+    
     print("🔧 Creating virtual environment...")
     try:
         venv.create(venv_path, with_pip=True)
@@ -28,6 +75,7 @@ def create_virtual_environment():
         return venv_path
     except Exception as e:
         print(f"❌ Failed to create virtual environment: {e}")
+        print("   Try running: apt install python3-venv")
         return None
 
 def get_venv_python(venv_path):
