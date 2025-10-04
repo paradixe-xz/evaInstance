@@ -27,30 +27,52 @@ def install_system_packages():
         print("✅ Cannot detect package manager, skipping system packages")
         return True
     
-    # Install python3-venv if needed
+    # Get Python version for specific package
+    python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    venv_package = f"{python_version}-venv"
+    
+    # Test if we can actually create a virtual environment (not just check help)
+    test_venv_path = Path("/tmp/test_venv_check")
     try:
-        # Check if python3-venv is available
-        result = subprocess.run(["python3", "-m", "venv", "--help"], 
-                              capture_output=True, text=True)
+        # Try to create a test virtual environment
+        result = subprocess.run([
+            "python3", "-m", "venv", str(test_venv_path), "--without-pip"
+        ], capture_output=True, text=True, timeout=30)
+        
         if result.returncode == 0:
-            print("✅ python3-venv is available")
+            # Clean up test venv
+            import shutil
+            if test_venv_path.exists():
+                shutil.rmtree(test_venv_path)
+            print(f"✅ {venv_package} is working")
             return True
+        else:
+            print(f"⚠️  Virtual environment creation failed: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️  Cannot test virtual environment: {e}")
+    
+    # Clean up test venv if it exists
+    try:
+        import shutil
+        if test_venv_path.exists():
+            shutil.rmtree(test_venv_path)
     except:
         pass
     
-    print("📦 Installing python3-venv...")
+    print(f"📦 Installing {venv_package}...")
     try:
         # Update package list
+        print("   Updating package list...")
         subprocess.run(["apt", "update"], check=True, capture_output=True)
         
-        # Install python3-venv
-        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
-        subprocess.run(["apt", "install", "-y", f"{python_version}-venv"], check=True)
-        print("✅ python3-venv installed successfully")
+        # Install version-specific python venv package
+        print(f"   Installing {venv_package}...")
+        subprocess.run(["apt", "install", "-y", venv_package], check=True)
+        print(f"✅ {venv_package} installed successfully")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install python3-venv: {e}")
-        print("   Please run manually: apt install python3-venv")
+        print(f"❌ Failed to install {venv_package}: {e}")
+        print(f"   Please run manually: apt install {venv_package}")
         return False
     except Exception as e:
         print(f"❌ Error installing system packages: {e}")
