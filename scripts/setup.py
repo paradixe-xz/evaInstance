@@ -56,13 +56,46 @@ def install_system_packages():
         print(f"❌ Error installing system packages: {e}")
         return False
 
+def validate_virtual_environment(venv_path):
+    """Validate that virtual environment has working pip"""
+    if not venv_path.exists():
+        return False
+    
+    pip_exe = get_venv_pip(venv_path)
+    python_exe = get_venv_python(venv_path)
+    
+    # Check if pip executable exists
+    if not pip_exe.exists():
+        print("⚠️  Virtual environment missing pip executable")
+        return False
+    
+    # Check if pip works
+    try:
+        result = subprocess.run([str(python_exe), "-m", "pip", "--version"], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print("✅ Virtual environment pip is working")
+            return True
+        else:
+            print("⚠️  Virtual environment pip is not working")
+            return False
+    except Exception as e:
+        print(f"⚠️  Virtual environment pip check failed: {e}")
+        return False
+
 def create_virtual_environment():
     """Create virtual environment if needed"""
     venv_path = project_root / "venv"
     
+    # Check if existing venv is valid
     if venv_path.exists():
-        print("✅ Virtual environment already exists")
-        return venv_path
+        if validate_virtual_environment(venv_path):
+            print("✅ Virtual environment already exists and is valid")
+            return venv_path
+        else:
+            print("🔧 Removing corrupted virtual environment...")
+            import shutil
+            shutil.rmtree(venv_path)
     
     # Install system packages first
     if not install_system_packages():
@@ -71,8 +104,15 @@ def create_virtual_environment():
     print("🔧 Creating virtual environment...")
     try:
         venv.create(venv_path, with_pip=True)
-        print("✅ Virtual environment created")
-        return venv_path
+        
+        # Validate the newly created environment
+        if validate_virtual_environment(venv_path):
+            print("✅ Virtual environment created successfully")
+            return venv_path
+        else:
+            print("❌ Virtual environment created but pip is not working")
+            return None
+            
     except Exception as e:
         print(f"❌ Failed to create virtual environment: {e}")
         print("   Try running: apt install python3-venv")
@@ -107,30 +147,45 @@ def install_dependencies():
     if externally_managed:
         print("⚠️  Detected externally managed environment, using virtual environment...")
         venv_path = create_virtual_environment()
-        if not venv_path:
-            return False
         
-        python_exe = get_venv_python(venv_path)
-        pip_exe = get_venv_pip(venv_path)
-        
-        # Upgrade pip first
-        try:
-            subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], 
-                          check=True, cwd=project_root)
-        except subprocess.CalledProcessError:
-            print("⚠️  Could not upgrade pip, continuing...")
-        
-        # Install dependencies
-        try:
-            subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
-                          check=True, cwd=project_root)
-            print("✅ Dependencies installed successfully in virtual environment")
+        if venv_path:
+            python_exe = get_venv_python(venv_path)
+            pip_exe = get_venv_pip(venv_path)
             
-            # Create activation script
-            create_activation_script(venv_path)
+            # Upgrade pip first
+            try:
+                subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], 
+                              check=True, cwd=project_root)
+            except subprocess.CalledProcessError:
+                print("⚠️  Could not upgrade pip, continuing...")
+            
+            # Install dependencies
+            try:
+                subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
+                              check=True, cwd=project_root)
+                print("✅ Dependencies installed successfully in virtual environment")
+                
+                # Create activation script
+                create_activation_script(venv_path)
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Failed to install dependencies in virtual environment: {e}")
+                print("⚠️  Falling back to system installation...")
+        else:
+            print("⚠️  Virtual environment creation failed, falling back to system installation...")
+        
+        # Fallback: try system installation with --break-system-packages
+        print("🔧 Attempting system installation with --break-system-packages...")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", 
+                          "--break-system-packages"], check=True, cwd=project_root)
+            print("✅ Dependencies installed successfully (system-wide)")
+            print("⚠️  Note: Used --break-system-packages flag")
             return True
         except subprocess.CalledProcessError as e:
             print(f"❌ Failed to install dependencies: {e}")
+            print("   Manual installation required:")
+            print("   pip install -r requirements.txt --break-system-packages")
             return False
     else:
         # Standard installation
