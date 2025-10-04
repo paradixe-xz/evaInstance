@@ -227,9 +227,26 @@ def main():
     print("\n🎉 Setup completed!")
     print("\nNext steps:")
     print("1. Edit .env file with your configuration")
-    print("2. Start Ollama service: ollama serve")
-    print("3. Run the server: python scripts_new/start_server.py")
-    print("   or: python main.py")
+    
+    # Check if virtual environment was created
+    venv_path = project_root / "venv"
+    if venv_path.exists():
+        print("2. Activate virtual environment:")
+        if os.name == 'nt':  # Windows
+            print("   activate.bat")
+        else:  # Linux/Mac
+            print("   source ./activate.sh")
+            print("   or: source venv/bin/activate")
+        print("3. Start Ollama service: ollama serve")
+        print("4. Run the server: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
+    else:
+        print("2. Start Ollama service: ollama serve")
+        print("3. Run the server: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
+    
+    print("\n📝 For RunPod:")
+    print("   - Virtual environment created automatically")
+    print("   - Use 'source venv/bin/activate' to activate")
+    print("   - Server will be accessible on port 8000")
 
 if __name__ == "__main__":
     main()
