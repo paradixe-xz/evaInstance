@@ -294,11 +294,12 @@ def check_ollama():
         return False
 
 def pull_ollama_model():
-    """Pull the default Ollama model"""
-    model = os.getenv("OLLAMA_MODEL", "llama2")
+    """Pull Llama 3.2 model"""
+    model = os.getenv("OLLAMA_MODEL", "llama3.2")
     print(f"🤖 Pulling Ollama model: {model}")
     try:
-        subprocess.run(["ollama", "pull", model], check=True, timeout=300)
+        print("   This may take several minutes depending on your internet connection...")
+        subprocess.run(["ollama", "pull", model], check=True, timeout=1800)  # 30 minutes timeout
         print(f"✅ Model {model} pulled successfully")
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
@@ -317,6 +318,38 @@ def initialize_database():
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
         return False
+
+def start_application():
+    """Start the FastAPI application"""
+    print("🚀 Starting FastAPI application...")
+    print("   Server will be accessible at: http://0.0.0.0:8000")
+    print("   Press Ctrl+C to stop the server")
+    print("="*50)
+    
+    # Check if virtual environment exists
+    venv_path = project_root / "venv"
+    if venv_path.exists():
+        python_exe = get_venv_python(venv_path)
+    else:
+        python_exe = "python3"
+    
+    try:
+        # Start the server with uvicorn
+        subprocess.run([
+            str(python_exe), "-m", "uvicorn", 
+            "app.main:app", 
+            "--host", "0.0.0.0", 
+            "--port", "8000", 
+            "--reload"
+        ], check=True)
+    except KeyboardInterrupt:
+        print("\n🛑 Server stopped by user")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to start server: {e}")
+        print("   You can start it manually with:")
+        if venv_path.exists():
+            print("   source venv/bin/activate")
+        print("   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
 
 def main():
     """Main setup function"""
@@ -350,28 +383,23 @@ def main():
     initialize_database()
     
     print("\n🎉 Setup completed!")
-    print("\nNext steps:")
-    print("1. Edit .env file with your configuration")
+    print("\n📝 Configuration notes:")
+    print("   - Edit .env file with your configuration if needed")
+    print("   - Llama 3.2 model downloaded and ready")
+    print("   - Database initialized")
     
     # Check if virtual environment was created
     venv_path = project_root / "venv"
     if venv_path.exists():
-        print("2. Activate virtual environment:")
-        if os.name == 'nt':  # Windows
-            print("   activate.bat")
-        else:  # Linux/Mac
-            print("   source ./activate.sh")
-            print("   or: source venv/bin/activate")
-        print("3. Start Ollama service: ollama serve")
-        print("4. Run the server: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
-    else:
-        print("2. Start Ollama service: ollama serve")
-        print("3. Run the server: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
+        print("   - Virtual environment created and activated")
     
-    print("\n📝 For RunPod:")
-    print("   - Virtual environment created automatically")
-    print("   - Use 'source venv/bin/activate' to activate")
-    print("   - Server will be accessible on port 8000")
+    print("\n🚀 Starting application automatically...")
+    print("   - Host: 0.0.0.0")
+    print("   - Port: 8000")
+    print("   - Auto-reload: enabled")
+    
+    # Start the application automatically
+    start_application()
 
 if __name__ == "__main__":
     main()
