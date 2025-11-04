@@ -23,7 +23,7 @@ class ChatRepository(BaseRepository[ChatSession]):
         self,
         user_id: int,
         session_id: str,
-        ai_personality: str = "ana",
+        ai_personality: str = "ema",
         channel: str = "whatsapp"
     ) -> ChatSession:
         """Create a new chat session"""

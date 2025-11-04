@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     
     # Ollama Settings
     ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="ana", env="OLLAMA_MODEL")
-    ollama_system_prompt: str = Field(default="You are Ana, a helpful AI assistant for WhatsApp conversations.", env="OLLAMA_SYSTEM_PROMPT")
+    ollama_model: str = Field(default="ema", env="OLLAMA_MODEL")
+    ollama_system_prompt: str = Field(
+        default="Eres EMA, la asistente de marketing de EPICO. Responde siempre en español neutro, con enfoque comercial y orientado a agendar reuniones.",
+        env="OLLAMA_SYSTEM_PROMPT"
+    )
     ollama_temperature: float = Field(default=0.7, env="OLLAMA_TEMPERATURE")
     ollama_max_tokens: int = Field(default=2000, env="OLLAMA_MAX_TOKENS")
     ollama_timeout: int = Field(default=30, env="OLLAMA_TIMEOUT")

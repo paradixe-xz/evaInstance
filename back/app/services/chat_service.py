@@ -90,7 +90,7 @@ class ChatService:
                     active_session = chat_repo.create_session(
                         user_id=user.id,
                         session_id=session_id,
-                        ai_personality="ana"
+                        ai_personality="ema"
                     )
                     logger.info(f"Created new chat session: {active_session.id}")
                 
