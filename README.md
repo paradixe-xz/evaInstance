@@ -1,8 +1,33 @@
-# Sistema ANA - Asistente de IA para Préstamos por Libranza
+# Eva AI Assistant
 
-## 🎯 Descripción General
+Un sistema completo de asistente virtual con WhatsApp Business API, llamadas telefónicas e inteligencia artificial.
 
-Sistema de IA conversacional especializado en asesoría financiera para préstamos por libranza, con capacidad de llamadas directas, transcripción completa y análisis inteligente para determinar el seguimiento humano necesario.
+## Estructura del Proyecto
+
+```
+evaInstance/
+├── back/           # Backend (FastAPI + Python)
+│   ├── app/        # Código principal de la aplicación
+│   ├── kani-tts/   # Servicio de Text-to-Speech
+│   ├── logs/       # Archivos de log
+│   ├── storage/    # Almacenamiento de archivos
+│   ├── .env        # Variables de entorno
+│   ├── requirements.txt
+│   └── start.py    # Script de inicio
+├── front/          # Frontend (preparado para React/Vue)
+├── .gitignore
+└── README.md
+```
+
+## Características del Backend
+
+- 🤖 **Integración con IA**: Usa Ollama para conversaciones inteligentes
+- 📱 **WhatsApp Business API**: Manejo completo de mensajes de WhatsApp
+- 🎤 **Llamadas telefónicas**: Integración con Twilio para llamadas de voz
+- 🗣️ **Text-to-Speech**: Síntesis de voz en español usando KaniTTS
+- 🎧 **Speech-to-Text**: Reconocimiento de voz para llamadas
+- 📊 **Base de datos**: Almacenamiento de conversaciones y usuarios
+- 🔄 **API REST**: Endpoints completos para todas las funcionalidades
 
 ## 🔄 Flujo de Trabajo
 
@@ -14,7 +39,7 @@ Sistema de IA conversacional especializado en asesoría financiera para préstam
 ### 2. **Llamadas Directas** 📞
 - Llamadas automáticas a todos los contactos válidos
 - Transcripción completa de toda la conversación
-- TTS con ElevenLabs para voz natural
+- TTS con KaniTTS para voz natural de alta calidad
 - Guión optimizado para ventas de préstamos
 
 ### 3. **Análisis Automático de IA** 🤖
@@ -59,15 +84,57 @@ export TWILIO_AUTH_TOKEN=your_auth_token
 export TWILIO_PHONE_NUMBER=your_phone_number
 export TWILIO_WEBHOOK_URL=your_webhook_url
 
-# ElevenLabs
-export ELEVENLABS_API_KEY=your_api_key
-export ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+# KaniTTS
+export KANITTS_MODEL=kani-tts-370m
+export KANITTS_SPEAKER=es_female_1
+export KANITTS_LANGUAGE=es
+export KANITTS_DEVICE=auto
+export KANITTS_TEMPERATURE=0.7
+export KANITTS_TOP_P=0.9
 
 # URL pública para archivos de audio
 export PUBLIC_BASE_URL=your_public_url
 ```
 
 ## 🚀 Instalación y Ejecución
+
+### Backend
+
+1. **Navegar al directorio del backend**:
+```bash
+cd back
+```
+
+2. **Instalar dependencias**:
+```bash
+pip install -r requirements.txt
+```
+
+3. **Configurar variables de entorno**:
+```bash
+cp .env.example .env
+# Editar .env con tus configuraciones
+```
+
+4. **Iniciar el servidor**:
+```bash
+python start.py
+```
+
+O manualmente:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Frontend
+
+El directorio `front/` está preparado para tu aplicación frontend. Se recomienda usar:
+- React o Vue.js
+- Tailwind CSS para estilos
+- Axios para comunicación con la API
+- Socket.io para tiempo real
+
+## 🔧 Configuración del Backend
 
 ### 1. Instalar dependencias
 ```bash
@@ -188,7 +255,13 @@ El sistema analiza automáticamente cada transcripción y determina:
 - ollama
 - python-multipart
 - pydub
-- elevenlabs
+- torch
+- torchaudio
+- transformers
+- accelerate
+- soundfile
+- librosa
+- nemo_toolkit
 - pandas
 - openpyxl
 - pytz
@@ -211,7 +284,7 @@ El sistema incluye herramientas de monitoreo:
 - **Streaming de IA**: Procesamiento en chunks para reducir latencia
 - **Procesamiento paralelo**: Generación de audio en threads separados
 - **Colas de audio**: Gestión eficiente por número de teléfono
-- **Configuración optimizada**: ElevenLabs configurado para velocidad
+- **Configuración optimizada**: KaniTTS configurado para baja latencia y alta calidad
 
 ### Beneficios
 - **Latencia reducida**: De 9 segundos a menos de 3 segundos
@@ -221,4 +294,4 @@ El sistema incluye herramientas de monitoreo:
 
 ## 📞 Soporte
 
-Para soporte técnico o preguntas sobre el sistema, consultar la documentación en `docs/` o contactar al equipo de desarrollo. 
+Para soporte técnico o preguntas sobre el sistema, consultar la documentación en `docs/` o contactar al equipo de desarrollo.

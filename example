@@ -1,0 +1,207 @@
+return (
+    <div className="min-h-screen flex">
+      {/* Panel izquierdo - Formulario */}
+      <div className="flex-1 flex items-center justify-center p-6 bg-background">
+        <div className="w-full max-w-md space-y-6">
+          {/* Logo/Header */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
+              <Sparkles className="w-6 h-6 text-primary" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-balance">
+              {isLogin ? "Bienvenido de nuevo" : "Crear cuenta"}
+            </h1>
+            <p className="text-muted-foreground text-pretty">
+              {isLogin ? "Inicia sesión para acceder a tu cuenta" : "Completa el formulario para comenzar"}
+            </p>
+          </div>
+
+          {/* Formulario */}
+          <Card className="border-border/50 shadow-lg">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-xl">{isLogin ? "Iniciar sesión" : "Registrarse"}</CardTitle>
+              <CardDescription>
+                {isLogin ? "Ingresa tus credenciales para continuar" : "Crea una nueva cuenta en segundos"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Error general */}
+                {error && (
+                  <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-1">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Campo Nombre (solo registro) */}
+                {!isLogin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre completo</Label>
+                    <Input
+                      id="name"
+                      type="text"
+                      placeholder="Eva García"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange("name", e.target.value)}
+                      className={fieldErrors.name ? "border-destructive" : ""}
+                      disabled={isLoading}
+                    />
+                    {fieldErrors.name && (
+                      <p className="text-sm text-destructive animate-in fade-in slide-in-from-top-1">
+                        {fieldErrors.name}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Campo Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Correo electrónico</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="tu@email.com"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange("email", e.target.value)}
+                      className={`pl-10 ${fieldErrors.email ? "border-destructive" : ""}`}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  {fieldErrors.email && (
+                    <p className="text-sm text-destructive animate-in fade-in slide-in-from-top-1">
+                      {fieldErrors.email}
+                    </p>
+                  )}
+                </div>
+
+                {/* Campo Contraseña */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Contraseña</Label>
+                    {isLogin && (
+                      <Link href="/auth/reset-password" className="text-sm text-primary hover:underline">
+                        ¿Olvidaste tu contraseña?
+                      </Link>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={(e) => handleInputChange("password", e.target.value)}
+                      className={`pl-10 pr-10 ${fieldErrors.password ? "border-destructive" : ""}`}
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      disabled={isLoading}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {fieldErrors.password && (
+                    <p className="text-sm text-destructive animate-in fade-in slide-in-from-top-1">
+                      {fieldErrors.password}
+                    </p>
+                  )}
+                  {!isLogin && !fieldErrors.password && (
+                    <p className="text-xs text-muted-foreground">Mínimo 8 caracteres</p>
+                  )}
+                </div>
+
+                {/* Botón Submit */}
+                <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <span className="animate-spin mr-2">⏳</span>
+                      Procesando...
+                    </>
+                  ) : isLogin ? (
+                    "Iniciar sesión"
+                  ) : (
+                    "Crear cuenta"
+                  )}
+                </Button>
+
+                {/* Toggle Login/Register */}
+                <div className="text-center text-sm">
+                  <span className="text-muted-foreground">{isLogin ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}</span>{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLogin(!isLogin)
+                      setError("")
+                      setFieldErrors({ email: "", password: "", name: "" })
+                    }}
+                    className="text-primary font-medium hover:underline"
+                    disabled={isLoading}
+                  >
+                    {isLogin ? "Regístrate" : "Inicia sesión"}
+                  </button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Footer */}
+          <p className="text-center text-xs text-muted-foreground">
+            Al continuar, aceptas nuestros{" "}
+            <Link href="/terms" className="underline hover:text-foreground">
+              Términos de Servicio
+            </Link>{" "}
+            y{" "}
+            <Link href="/privacy" className="underline hover:text-foreground">
+              Política de Privacidad
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* Panel derecho - Hero visual */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-primary/10 via-primary/5 to-background items-center justify-center p-12 relative overflow-hidden">
+        {/* Patrón decorativo de fondo */}
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+
+        <div className="relative z-10 max-w-lg space-y-6 text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 backdrop-blur-sm mb-6">
+            <Sparkles className="w-10 h-10 text-primary" />
+          </div>
+
+          <h2 className="text-4xl font-bold tracking-tight text-balance">Bienvenido a Eva</h2>
+
+          <p className="text-lg text-muted-foreground text-pretty leading-relaxed">
+            Tu plataforma para gestionar todo lo que necesitas. Accede a herramientas poderosas diseñadas para
+            simplificar tu trabajo.
+          </p>
+
+          {/* Features */}
+          <div className="grid gap-4 pt-8">
+            {[
+              { title: "Seguro y confiable", desc: "Tus datos protegidos con encriptación de nivel empresarial" },
+              { title: "Acceso instantáneo", desc: "Inicia sesión y comienza a trabajar en segundos" },
+              { title: "Soporte 24/7", desc: "Estamos aquí para ayudarte cuando lo necesites" },
+            ].map((feature, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 text-left p-4 rounded-lg bg-background/50 backdrop-blur-sm border border-border/50"
+              >
+                <div className="w-2 h-2 rounded-full bg-primary mt-2" />
+                <div>
+                  <h3 className="font-semibold text-sm">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">{feature.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
