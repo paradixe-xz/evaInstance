@@ -63,7 +63,7 @@ class ChatService:
                 user_repo = UserRepository(db)
                 chat_repo = ChatRepository(db)
                 message_repo = MessageRepository(db)
-            agent_repo = AgentRepository(db)
+                agent_repo = AgentRepository(db)
                 
                 # Get or create user
                 user = user_repo.get_by_phone_number(phone_number)
