@@ -13,6 +13,7 @@ from ..models.user import User
 from ..models.chat import ChatSession, Message, MessageType, MessageDirection, ChatSessionStatus
 from ..repositories.user_repository import UserRepository
 from ..repositories.chat_repository import ChatRepository, MessageRepository
+from ..repositories.agent_repository import AgentRepository
 from .whatsapp_service import WhatsAppService
 from .ollama_service import OllamaService
 
@@ -62,6 +63,7 @@ class ChatService:
                 user_repo = UserRepository(db)
                 chat_repo = ChatRepository(db)
                 message_repo = MessageRepository(db)
+            agent_repo = AgentRepository(db)
                 
                 # Get or create user
                 user = user_repo.get_by_phone_number(phone_number)
@@ -230,6 +232,35 @@ class ChatService:
                 "total_messages": user.total_messages,
                 "session_started": session.started_at.isoformat() if session.started_at else None
             }
+            
+            # Attach meeting information if already scheduled
+            if session.meeting_date or session.meeting_time or session.meeting_timezone:
+                meeting_info = {}
+                if session.meeting_date:
+                    meeting_info["date"] = session.meeting_date.isoformat()
+                if session.meeting_time:
+                    meeting_info["time"] = session.meeting_time.strftime("%H:%M")
+                if session.meeting_timezone:
+                    meeting_info["timezone"] = session.meeting_timezone
+                user_context["meeting"] = meeting_info
+            
+            # Attach agent workflow configuration if available
+            agent = None
+            try:
+                agent = agent_repo.get_by_ollama_model_name(self.ollama_service.model)
+            except Exception as e:
+                logger.warning(f"Unable to fetch agent configuration for model {self.ollama_service.model}: {e}")
+            
+            if agent:
+                user_context.setdefault("agent", {})
+                user_context["agent"].update({
+                    "id": agent.id,
+                    "name": agent.name,
+                    "description": agent.description,
+                    "conversation_style": agent.conversation_style,
+                    "workflow_steps": agent.workflow_steps,
+                    "conversation_structure": agent.conversation_structure
+                })
             
             # Generate AI response
             ai_response = self.ollama_service.generate_response(

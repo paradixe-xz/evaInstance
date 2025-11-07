@@ -95,6 +95,58 @@ class TouscorpFinalAPITester:
             print(f"\n💥 Error de conexión: {e}")
             return None
 
+    def test_create_secondary_lead(self):
+        """Crea un segundo lead con datos diferenciados para validar el flujo completo"""
+        self.print_header("🧑‍💼 PRUEBA: CREAR LEAD SECUNDARIO")
+
+        unique_suffix = datetime.now().strftime("%M%S")
+        secondary_lead_data = {
+            "name": "TEST",
+            "last_name": "PYTHON TWO",
+            "email": f"test.python+secondary{unique_suffix}@touscorp.com",
+            "phone_number": f"95480{unique_suffix}2",
+            "media": "WEB",
+            "entervia": "9548092012",
+            "product": "",
+            "address": "456 Secondary Ave",
+            "city": "Fort Lauderdale",
+            "state": "FL",
+            "zip": "33301",
+            "zip4": "5678",
+            "country": "US",
+            "comment": "Lead secundario de prueba Python",
+            "addInfo": {
+                "tscReference": "DEFAULT",
+                "data": [
+                    {"tscReferenceCode": "TSCREF1", "tscReferenceValue": "PYTHON_TEST_SECONDARY"},
+                    {"tscReferenceCode": "TSCREF2", "tscReferenceValue": "API_SCRIPT_SECONDARY"}
+                ]
+            }
+        }
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/leads",
+                headers=self.headers,
+                json=secondary_lead_data,
+                timeout=60
+            )
+
+            result = self.print_response(response, secondary_lead_data)
+
+            if result and result.get('rescode') == '000':
+                lead_num = result.get('leadnum')
+                self.created_leads.append(lead_num)
+                print(f"\n✅ Lead secundario creado exitosamente: #{lead_num}")
+                return lead_num
+            else:
+                print(f"\n❌ Error creando lead secundario: {result}")
+                return None
+
+        except Exception as e:
+            print(f"\n💥 Error de conexión creando lead secundario: {e}")
+            return None
+
     def test_update_lead(self, lead_num):
         """Prueba actualizar un lead"""
         if not lead_num:
@@ -310,10 +362,11 @@ class TouscorpFinalAPITester:
         # 1. Crear Lead
         print("\n1️⃣ Creando lead...")
         lead_num = self.test_create_lead()
-        
+
         if not lead_num:
             print("⚠️  Usando lead de ejemplo para continuar...")
             lead_num = "182190"
+
         
         # 2. Actualizar Lead (si se creó uno nuevo)
         if lead_num and lead_num != "182190":
@@ -323,21 +376,53 @@ class TouscorpFinalAPITester:
         # 3. Crear Orden
         print("\n3️⃣ Creando orden...")
         order_num = self.test_create_order(lead_num)
-        
+
         if not order_num:
             print("⚠️  Usando orden de ejemplo para pago...")
             order_num = "2251"
-        
+
         # 4. Procesar Pago
         print("\n4️⃣ Procesando pago...")
         receipt_id = self.test_process_payment(order_num, lead_num)
-        
+
+        # Flujo secundario completo para un nuevo lead
+        print("\n🔁 Iniciando flujo secundario con un segundo lead de validación...")
+        secondary_lead_num = self.test_create_secondary_lead()
+
+        secondary_order_num = None
+        secondary_receipt_id = None
+
+        if secondary_lead_num:
+            if secondary_lead_num != "182190":
+                print("\n🔁 Actualizando lead secundario...")
+                self.test_update_lead(secondary_lead_num)
+
+            print("\n🔁 Creando orden secundaria...")
+            secondary_order_num = self.test_create_order(secondary_lead_num)
+
+            if not secondary_order_num:
+                print("⚠️  Usando orden de ejemplo para pago secundario...")
+                secondary_order_num = "2251"
+
+            print("\n🔁 Procesando pago secundario...")
+            secondary_receipt_id = self.test_process_payment(secondary_order_num, secondary_lead_num)
+        else:
+            print("⚠️  No se pudo crear el segundo lead, se omite el flujo secundario.")
+
         # Resumen final
         self.print_header("📊 RESUMEN DEL FLUJO COMPLETO")
-        print(f"✅ Lead: #{lead_num}")
-        print(f"✅ Orden: #{order_num}")
-        print(f"✅ Pago: #{receipt_id or 'N/A'}")
-        
+        print(f"✅ Lead principal: #{lead_num}")
+        print(f"✅ Orden principal: #{order_num}")
+        print(f"✅ Pago principal: #{receipt_id or 'N/A'}")
+
+        if secondary_lead_num:
+            print("\n➕ Resultados flujo secundario")
+            print(f"   ✅ Lead secundario: #{secondary_lead_num}")
+            print(f"   ✅ Orden secundaria: #{secondary_order_num or 'N/A'}")
+            print(f"   ✅ Pago secundario: #{secondary_receipt_id or 'N/A'}")
+        else:
+            print("\n➕ Resultados flujo secundario: no ejecutado")
+
         return True
 
     def show_summary(self):

@@ -42,6 +42,8 @@ class Agent(Base):
     personality_traits = Column(JSON, nullable=True)  # JSON object with traits
     conversation_style = Column(String(50), default="professional")  # professional, friendly, casual
     response_time_limit = Column(Integer, default=30)  # seconds
+    workflow_steps = Column(JSON, nullable=True)  # Ordered checklist for the agent
+    conversation_structure = Column(JSON, nullable=True)  # Detailed step-by-step structure
     
     # Voice settings (for call agents)
     voice_id = Column(String(100), nullable=True)
@@ -113,6 +115,8 @@ class Agent(Base):
             "personality_traits": self.personality_traits,
             "conversation_style": self.conversation_style,
             "response_time_limit": self.response_time_limit,
+            "workflow_steps": self.workflow_steps,
+            "conversation_structure": self.conversation_structure,
             "voice_id": self.voice_id,
             "voice_speed": self.voice_speed,
             "voice_pitch": self.voice_pitch,

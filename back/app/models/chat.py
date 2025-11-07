@@ -2,9 +2,9 @@
 Chat models for conversation management
 """
 
-from datetime import datetime
+from datetime import datetime, date, time
 from enum import Enum
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum as SQLEnum, Date, Time
 from sqlalchemy.orm import relationship
 
 from ..core.database import Base
@@ -56,6 +56,9 @@ class ChatSession(Base):
     started_at = Column(DateTime, default=datetime.utcnow)
     last_activity_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
+    meeting_date = Column(Date, nullable=True)
+    meeting_time = Column(Time, nullable=True)
+    meeting_timezone = Column(String(50), nullable=True)
     
     # Message counts
     total_messages = Column(Integer, default=0)
@@ -64,7 +67,7 @@ class ChatSession(Base):
     
     # AI context
     context_summary = Column(Text, nullable=True)
-    ai_personality = Column(String(50), default="ana")
+    ai_personality = Column(String(50), default="ema")
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -90,6 +93,9 @@ class ChatSession(Base):
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
+            "meeting_date": self.meeting_date.isoformat() if self.meeting_date else None,
+            "meeting_time": self.meeting_time.isoformat() if self.meeting_time else None,
+            "meeting_timezone": self.meeting_timezone,
             "total_messages": self.total_messages,
             "user_messages": self.user_messages,
             "ai_messages": self.ai_messages,

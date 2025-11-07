@@ -155,14 +155,19 @@ def test_simple_order(leadnum=None):
                     if ordernum:
                         print(f"✅ ¡ÉXITO! Orden creada: #{ordernum}")
                         return ordernum
-                    else:
-                        print(f"✅ ¡ÉXITO! Orden creada (sin número en respuesta)")
-                        print(f"   Respuesta: {result}")
-                        # Generar un número temporal para continuar el flujo
-                        import time
-                        temp_ordernum = f"TEMP_{int(time.time())}"
-                        print(f"   Usando número temporal: {temp_ordernum}")
-                        return temp_ordernum
+
+                    # Algunos entornos devuelven el número en resmsg aunque rescode sea 000
+                    resmsg = result.get('resmsg', '')
+                    if resmsg:
+                        import re
+                        order_match = re.search(r'Ordernum:(\d+)', resmsg)
+                        if order_match:
+                            extracted_ordernum = order_match.group(1)
+                            print(f"✅ ¡ÉXITO! Orden creada (extraída de resmsg): #{extracted_ordernum}")
+                            return extracted_ordernum
+
+                    print("⚠️  La respuesta no incluyó el número de orden. Se requiere validar manualmente antes de intentar el pago.")
+                    return None
                 
                 # Manejar código 818 (éxito con información adicional)
                 elif result.get('rescode') == '818':
@@ -201,7 +206,15 @@ def test_simple_order(leadnum=None):
 
 def test_simple_payment(ordernum=None, leadnum=None):
     """Prueba simple de la API de Pagos con los datos exactos del ejemplo"""
-    print(f"\n💳 PROBANDO API DE PAGOS CON ORDERNUM: {ordernum or '2251'} y LEADNUM: {leadnum or '1239'}...")
+    effective_ordernum = ordernum or "2251"
+    effective_leadnum = leadnum or "1239"
+
+    if not str(effective_ordernum).isdigit():
+        print(f"⚠️  El número de orden '{effective_ordernum}' no es válido. Usando el ordernum de ejemplo 2251 para evitar rechazos de la pasarela.")
+        effective_ordernum = "2251"
+        effective_leadnum = "1239"
+
+    print(f"\n💳 PROBANDO API DE PAGOS CON ORDERNUM: {effective_ordernum} y LEADNUM: {effective_leadnum}...")
     
     url = "https://tsc-api-925835182876.us-east1.run.app/api/v1/1998010101/payment"
     headers = {
@@ -216,8 +229,8 @@ def test_simple_payment(ordernum=None, leadnum=None):
         "sellerName": "jorge u",
         "company": "1998010101",
         "department": "100",
-        "ordernum": ordernum or "2251",  # Usar el ordernum recibido
-        "leadnum": leadnum or "1239",   # Usar el leadnum recibido
+        "ordernum": effective_ordernum,
+        "leadnum": effective_leadnum,
         "customerName": "Jorge",
         "customerLastname": "Ulloa",
         "direction": {

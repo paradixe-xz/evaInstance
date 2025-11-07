@@ -3,7 +3,7 @@ Agent schemas
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,8 @@ class AgentCreate(AgentBase):
     voice_speed: float = Field(default=1.0, ge=0.5, le=2.0)
     voice_pitch: float = Field(default=1.0, ge=0.5, le=2.0)
     campaign_id: Optional[int] = None
+    workflow_steps: Optional[List[str]] = None
+    conversation_structure: Optional[List[Dict[str, Any]]] = None
 
 
 class AgentUpdate(BaseModel):
@@ -64,6 +66,8 @@ class AgentUpdate(BaseModel):
     voice_pitch: Optional[float] = Field(None, ge=0.5, le=2.0)
     campaign_id: Optional[int] = None
     is_active: Optional[bool] = None
+    workflow_steps: Optional[List[str]] = None
+    conversation_structure: Optional[List[Dict[str, Any]]] = None
 
 
 class AgentResponse(AgentBase):
@@ -91,6 +95,8 @@ class AgentResponse(AgentBase):
     voice_id: Optional[str]
     voice_speed: float
     voice_pitch: float
+    workflow_steps: Optional[List[str]]
+    conversation_structure: Optional[List[Dict[str, Any]]]
     total_interactions: int
     successful_interactions: int
     success_rate: float
