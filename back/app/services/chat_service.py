@@ -218,7 +218,8 @@ class ChatService:
         """
         try:
             message_repo = MessageRepository(db)
-            
+            agent_repo = AgentRepository(db)
+
             # Get conversation context (last 10 messages)
             conversation_history = message_repo.get_conversation_context(
                 session.id, max_messages=10
