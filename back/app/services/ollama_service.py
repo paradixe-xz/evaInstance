@@ -41,7 +41,8 @@ class OllamaService:
         self,
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        user_context: Optional[Dict[str, Any]] = None
+        user_context: Optional[Dict[str, Any]] = None,
+        conversation_state: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Generate AI response using Ollama
@@ -50,10 +51,87 @@ class OllamaService:
             user_message: User's message
             conversation_history: Previous conversation messages
             user_context: Additional user context (name, preferences, etc.)
+            conversation_state: Current conversation state
             
         Returns:
             AI generated response
         """
+        
+        # If we're in AI conversation mode, generate a natural response
+        if conversation_state and conversation_state.get("current_step") == "ai_conversation":
+            return self._generate_ai_response(user_message, conversation_history, user_context, conversation_state)
+            
+        # Otherwise, use the default flow response
+        return self._generate_flow_response(user_message, conversation_history, user_context)
+        
+    def _generate_ai_response(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        user_context: Optional[Dict[str, Any]],
+        conversation_state: Dict[str, Any]
+    ) -> str:
+        """Generate a response when in AI conversation mode"""
+        # Build system prompt based on conversation state
+        system_prompt = self._build_system_prompt(conversation_state, user_context)
+        
+        # Build conversation context
+        messages = self._build_conversation_context(
+            user_message=user_message,
+            conversation_history=conversation_history,
+            user_context={"system_prompt": system_prompt, **(user_context or {})}
+        )
+        
+        # Generate response
+        response = self._call_ollama_api(messages)
+        
+        return response
+        
+    def _generate_flow_response(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        user_context: Optional[Dict[str, Any]]
+    ) -> str:
+        """Generate a response based on the conversation flow"""
+        # Default implementation - can be overridden by specific flow steps
+        return "¡Hola! ¿En qué puedo ayudarte hoy?"
+        
+    def _build_system_prompt(
+        self,
+        conversation_state: Dict[str, Any],
+        user_context: Optional[Dict[str, Any]]
+    ) -> str:
+        """Build the system prompt based on conversation state"""
+        prompt = """Eres ISA, una asesora de seguros profesional, amable y servicial de Seguros Mundial. 
+Estás hablando con un cliente que necesita asesoría sobre seguros. 
+
+Sigue estas reglas:
+1. Mantén un tono amable, profesional y cercano.
+2. Haz preguntas relevantes para entender las necesidades del cliente.
+3. Ofrece información general sobre los seguros disponibles.
+4. Si el cliente está interesado en un seguro específico, pide los datos necesarios.
+5. No des información financiera o legal específica, solo orientación general.
+6. Si el cliente quiere salir de la conversación, despídete amablemente.
+
+Tienes acceso a los siguientes seguros:
+- Seguro de Hogar "Vive Tranqui"
+- Seguro Oncológico "Venzamos"
+- Seguro para Mascotas "Peludito"
+"""
+        
+        # Add selected insurance to context if available
+        if conversation_state.get("data", {}).get("selected_insurance"):
+            prompt += f"\nEl cliente ha mostrado interés en: {conversation_state['data']['selected_insurance']}"
+            
+        # Add user context if available
+        if user_context:
+            if "name" in user_context:
+                prompt += f"\n\nNombre del cliente: {user_context['name']}"
+            if "phone" in user_context:
+                prompt += f"\nTeléfono del cliente: {user_context['phone']}"
+                
+        return prompt
         try:
             # Build conversation context
             messages = self._build_conversation_context(
@@ -92,6 +170,8 @@ class OllamaService:
             models_to_try = [
                 self.model,
                 f"{self.model}:latest",
+                "isa:latest",
+                "isa",
                 "emma",
                 "emma:latest",
                 "emma-medium"
@@ -178,6 +258,10 @@ class OllamaService:
         
         # Add system prompt with user context
         system_message = self.system_prompt
+        
+        # Override system prompt if provided in user_context
+        if user_context and 'system_prompt' in user_context:
+            system_message = user_context['system_prompt']
         
         if user_context:
             user_name = user_context.get("name", "Usuario")

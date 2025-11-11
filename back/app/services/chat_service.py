@@ -16,6 +16,7 @@ from ..repositories.chat_repository import ChatRepository, MessageRepository
 from ..repositories.agent_repository import AgentRepository
 from .whatsapp_service import WhatsAppService
 from .ollama_service import OllamaService
+from .conversation_service import ConversationService
 
 logger = get_logger(__name__)
 
@@ -26,6 +27,7 @@ class ChatService:
     def __init__(self):
         self.whatsapp_service = WhatsAppService()
         self.ollama_service = OllamaService()
+        self.conversation_service = ConversationService()
         
     def process_incoming_message(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -46,6 +48,67 @@ class ChatService:
                 if parsed_message and parsed_message.get("type") == "status":
                     self._handle_status_update(parsed_message)
                 return {"status": "ignored", "reason": "Not a message or status update"}
+                
+            # Get user ID and message
+            user_id = parsed_message.get("from")
+            user_message = parsed_message.get("text", "").strip()
+            
+            if not user_id or not user_message:
+                return {"status": "error", "reason": "Missing user ID or message"}
+                
+            # Get conversation state and determine next step
+            conversation_state = self.conversation_service.get_conversation_state(user_id)
+            next_step = self.conversation_service.get_next_step(user_id, user_message)
+            
+            # If we have a predefined message, send it
+            if next_step.get("message"):
+                self.whatsapp_service.send_message(
+                    to=user_id,
+                    message=next_step["message"]
+                )
+                return {"status": "success", "next_step": next_step.get("next_step")}
+                
+            # If we're in AI conversation mode, generate a response using Ollama
+            if conversation_state.get("current_step") == "ai_conversation":
+                # Get conversation history from database
+                chat_session = self._get_or_create_chat_session(user_id)
+                history = self._get_conversation_history(chat_session.id)
+                
+                # Generate AI response
+                response = self.ollama_service.generate_response(
+                    user_message=user_message,
+                    conversation_history=history,
+                    user_context={
+                        "phone": user_id,
+                        "name": parsed_message.get("profile_name", "Usuario")
+                    },
+                    conversation_state=conversation_state
+                )
+                
+                # Save messages to database
+                self._save_message(
+                    chat_session_id=chat_session.id,
+                    content=user_message,
+                    direction="incoming",
+                    message_type="text"
+                )
+                
+                self._save_message(
+                    chat_session_id=chat_session.id,
+                    content=response,
+                    direction="outgoing",
+                    message_type="text"
+                )
+                
+                # Send response via WhatsApp
+                self.whatsapp_service.send_message(
+                    to=user_id,
+                    message=response
+                )
+                
+                return {"status": "success", "response": response}
+                
+            return {"status": "success", "next_step": next_step.get("next_step")}
             
             # Extract message details
             phone_number = parsed_message["from"]
@@ -127,9 +190,19 @@ class ChatService:
                 
                 # Generate AI response only for text messages
                 if message_type == "text" and message_content.strip():
-                    ai_response = self._generate_ai_response(
-                        user, active_session, message_content, db
+                    # Get next message from conversation flow
+                    flow_response = self.conversation_service.get_next_message(
+                        user_id=str(user.id),
+                        user_input=message_content
                     )
+                    
+                    # If flow has a message, use it; otherwise generate with AI
+                    if flow_response.get("message"):
+                        ai_response = flow_response["message"]
+                    else:
+                        ai_response = self._generate_ai_response(
+                            user, active_session, message_content, db
+                        )
                     
                     if ai_response:
                         # Send AI response via WhatsApp
@@ -205,7 +278,7 @@ class ChatService:
         db: Session
     ) -> Optional[str]:
         """
-        Generate AI response using Ollama
+        Generate AI response using Ollama with conversation flow context
         
         Args:
             user: User object
@@ -219,19 +292,26 @@ class ChatService:
         try:
             message_repo = MessageRepository(db)
             agent_repo = AgentRepository(db)
-
+            
             # Get conversation context (last 10 messages)
             conversation_history = message_repo.get_conversation_context(
                 session.id, max_messages=10
             )
             
-            # Prepare user context
+            # Get current conversation state
+            conversation_state = self.conversation_service.conversation_states.get(
+                str(user.id), 
+                {"current_step": "initial_greeting", "data": {}}
+            )
+            
+            # Prepare user context with conversation state
             user_context = {
                 "name": user.name,
                 "phone": user.phone_number,
                 "language": user.language,
                 "total_messages": user.total_messages,
-                "session_started": session.started_at.isoformat() if session.started_at else None
+                "session_started": session.started_at.isoformat() if session.started_at else None,
+                "conversation_state": conversation_state
             }
             
             # Attach meeting information if already scheduled

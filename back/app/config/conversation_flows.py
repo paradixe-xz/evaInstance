@@ -1,0 +1,78 @@
+"""
+Conversation flow configurations for different AI personalities
+"""
+
+# Default conversation flow for ISA
+DEFAULT_ISA_FLOW = {
+    "initial_greeting": {
+        "message": "¡Hola! Soy ISA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.",
+        "next_step": "data_authorization"
+    },
+    "data_authorization": {
+        "message": "Antes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.",
+        "next_step": "insurance_selection"
+    },
+    "insurance_selection": {
+        "message": "¿Cuál de nuestros seguros te interesa hoy?\n1. 🏠 Seguro de Hogar \"Vive Tranqui\"\n2. 🩺 Seguro Oncológico \"Venzamos\"\n3. 🐶 Seguro para Mascotas \"Peludito\"",
+        "options": ["1", "2", "3"],
+        "next_step": {
+            "1": "home_insurance_flow",
+            "2": "health_insurance_flow",
+            "3": "pet_insurance_flow"
+        }
+    },
+    "home_insurance_flow": {
+        "message": "¡Excelente elección! El Seguro de Hogar 'Vive Tranqui' te brinda protección completa para tu hogar. Para ofrecerte la mejor cotización, necesito algunos datos:",
+        "questions": [
+            {
+                "question": "¿En qué ciudad se encuentra la propiedad a asegurar?",
+                "field": "city"
+            },
+            {
+                "question": "¿Cuál es el valor aproximado de los contenidos de tu hogar?",
+                "field": "content_value"
+            },
+            {
+                "question": "¿La propiedad es casa o apartamento?",
+                "field": "property_type"
+            }
+        ],
+        "next_step": "quote_generation"
+    },
+    "quote_generation": {
+        "message": "¡Perfecto! Con los datos proporcionados, he generado una cotización personalizada. ¿Te gustaría que te envíe los detalles por correo electrónico?",
+        "next_step": "email_confirmation"
+    },
+    "email_confirmation": {
+        "message": "Por favor, confirma tu correo electrónico para enviarte la cotización.",
+        "field": "email",
+        "validation": "email",
+        "next_step": "closing"
+    },
+    "closing": {
+        "message": "¡Gracias por tu interés! Un asesor se pondrá en contacto contigo a la brevedad para finalizar el proceso. ¿Hay algo más en lo que pueda ayudarte?",
+        "next_step": "end_conversation"
+    },
+    "end_conversation": {
+        "message": "Ha sido un placer atenderte. ¡Que tengas un excelente día! 😊",
+        "end": True
+    }
+}
+
+# Add more flows as needed
+CONVERSATION_FLOWS = {
+    "isa": DEFAULT_ISA_FLOW,
+    # Add other flows here
+}
+
+def get_flow(flow_name: str) -> dict:
+    """
+    Get conversation flow by name
+    
+    Args:
+        flow_name: Name of the flow to retrieve
+        
+    Returns:
+        dict: The requested conversation flow
+    """
+    return CONVERSATION_FLOWS.get(flow_name, DEFAULT_ISA_FLOW)
