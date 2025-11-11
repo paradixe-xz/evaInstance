@@ -188,8 +188,7 @@ class ChatService:
             if not user_id or not user_message:
                 return {"status": "error", "reason": "Missing user ID or message"}
                 
-            # Get conversation state and determine next step
-            conversation_state = self.conversation_service.get_conversation_state(user_id)
+            # Determine next step based on user input
             next_step = self.conversation_service.get_next_step(user_id, user_message)
             
             # If we have a predefined message, send it
@@ -200,6 +199,9 @@ class ChatService:
                 )
                 return {"status": "success", "next_step": next_step.get("next_step")}
                 
+            # Refresh conversation state after potential transitions
+            conversation_state = self.conversation_service.get_conversation_state(user_id)
+            
             # If we're in AI conversation mode, generate a response using Ollama
             if conversation_state.get("current_step") == "ai_conversation":
                 # Get conversation history from database
@@ -221,15 +223,18 @@ class ChatService:
                 self._save_message(
                     chat_session_id=chat_session.id,
                     content=user_message,
-                    direction="incoming",
-                    message_type="text"
+                    direction=MessageDirection.INCOMING,
+                    message_type="text",
+                    whatsapp_message_id=parsed_message.get("message_id"),
+                    user_id=chat_session.user_id
                 )
                 
                 self._save_message(
                     chat_session_id=chat_session.id,
                     content=response,
-                    direction="outgoing",
-                    message_type="text"
+                    direction=MessageDirection.OUTGOING,
+                    message_type="text",
+                    user_id=chat_session.user_id
                 )
                 
                 # Send response via WhatsApp

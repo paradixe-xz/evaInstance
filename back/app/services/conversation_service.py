@@ -59,20 +59,61 @@ class ConversationService:
         # Initialize response
         response = {"message": None, "next_step": None, "data": state.get("data", {})}
         
-        # Handle initial greeting - any response is considered authorization
+        # Handle initial greeting - send greeting and move to authorization step
         if current_step == "initial_greeting":
-            # If user responds to the greeting (even if not exactly "sí"), move to AI conversation
-            self.update_conversation_state(user_id, {
-                "current_step": "ai_conversation",
-                "data": {
+            response["message"] = step_data.get("message")
+            next_step = step_data.get("next_step", "waiting_authorization")
+            response["next_step"] = next_step
+            self.update_conversation_state(user_id, {"current_step": next_step})
+            return response
+        
+        # Handle explicit authorization step
+        if current_step == "waiting_authorization":
+            normalized_input = user_input.strip().lower()
+            affirmative_responses = {"sí", "si", "s", "yes", "y"}
+            negative_responses = {"no", "n"}
+            
+            if normalized_input in affirmative_responses:
+                updated_data = {
                     **state.get("data", {}),
                     "data_authorized": True,
-                    "conversation_started": True
+                    "conversation_started": True,
+                    "authorization_timestamp": datetime.utcnow().isoformat()
                 }
-            })
-            response["next_step"] = "ai_conversation"
-            return response
+                self.update_conversation_state(user_id, {
+                    "current_step": "ai_conversation",
+                    "data": updated_data
+                })
+                ai_step = self.flow.get("ai_conversation", {})
+                response["message"] = ai_step.get("message")
+                response["next_step"] = "ai_conversation"
+                response["data"] = updated_data
+                return response
             
+            if normalized_input in negative_responses:
+                updated_data = {
+                    **state.get("data", {}),
+                    "data_authorized": False,
+                    "conversation_started": False
+                }
+                self.update_conversation_state(user_id, {"data": updated_data})
+                decline_message = step_data.get(
+                    "decline_message",
+                    "Entiendo. Si cambias de opinión y deseas continuar, por favor responde 'sí'."
+                )
+                response["message"] = decline_message
+                response["next_step"] = "waiting_authorization"
+                response["data"] = updated_data
+                return response
+            
+            # Unrecognized response - resend authorization prompt
+            response["message"] = step_data.get(
+                "message",
+                "Para continuar necesito tu autorización. Por favor responde 'sí' para confirmar."
+            )
+            response["next_step"] = "waiting_authorization"
+            return response
+        
         # Handle AI conversation mode - all messages go to the AI
         if current_step == "ai_conversation":
             response["message"] = None  # Will be handled by OllamaService

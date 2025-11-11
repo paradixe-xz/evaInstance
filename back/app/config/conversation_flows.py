@@ -17,7 +17,7 @@ DEFAULT_ISA_FLOW = {
         }
     },
     "ai_conversation": {
-        "message": "¡Perfecto! Ahora puedo ayudarte con cualquier consulta sobre nuestros seguros. ¿En qué puedo ayudarte hoy? 😊",
+        "message": None,
         "next_step": "ai_conversation"
     },
     "home_insurance_flow": {
