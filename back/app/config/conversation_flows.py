@@ -5,21 +5,11 @@ Conversation flow configurations for different AI personalities
 # Default conversation flow for ISA
 DEFAULT_ISA_FLOW = {
     "initial_greeting": {
-        "message": "¡Hola! Soy ISA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.",
-        "next_step": "data_authorization"
+        "message": "¡Hola! Soy ISA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.\n\nAntes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.",
+        "next_step": "ai_conversation"
     },
-    "data_authorization": {
-        "message": "Antes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.",
-        "next_step": "insurance_selection"
-    },
-    "insurance_selection": {
-        "message": "¿Cuál de nuestros seguros te interesa hoy?\n1. 🏠 Seguro de Hogar \"Vive Tranqui\"\n2. 🩺 Seguro Oncológico \"Venzamos\"\n3. 🐶 Seguro para Mascotas \"Peludito\"",
-        "options": ["1", "2", "3"],
-        "next_step": {
-            "1": "home_insurance_flow",
-            "2": "health_insurance_flow",
-            "3": "pet_insurance_flow"
-        }
+    "ai_conversation": {
+        "message": None  # Handled by OllamaService
     },
     "home_insurance_flow": {
         "message": "¡Excelente elección! El Seguro de Hogar 'Vive Tranqui' te brinda protección completa para tu hogar. Para ofrecerte la mejor cotización, necesito algunos datos:",

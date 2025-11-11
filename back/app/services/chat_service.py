@@ -29,6 +29,125 @@ class ChatService:
         self.ollama_service = OllamaService()
         self.conversation_service = ConversationService()
         
+    def _get_or_create_chat_session(self, user_id: str):
+        """
+        Get an existing chat session or create a new one
+        
+        Args:
+            user_id: User's WhatsApp ID
+            
+        Returns:
+            ChatSession object
+        """
+        db_generator = get_db()
+        db = next(db_generator)
+        try:
+            chat_repo = ChatRepository(db)
+            user_repo = UserRepository(db)
+            
+            # Get or create user
+            user = user_repo.get_by_whatsapp_id(user_id)
+            if not user:
+                user = user_repo.create({
+                    "phone_number": user_id,
+                    "whatsapp_id": user_id,
+                    "name": f"User {user_id[-4:]}",
+                    "is_active": True,
+                    "language": "es"
+                })
+            
+            # Get or create active session
+            active_session = chat_repo.get_active_session_for_user(user.id)
+            if not active_session:
+                session_id = f"session_{user.id}_{int(datetime.utcnow().timestamp())}"
+                active_session = chat_repo.create_session(
+                    user_id=user.id,
+                    session_id=session_id,
+                    ai_personality="isa"
+                )
+            
+            return active_session
+            
+        finally:
+            try:
+                next(db_generator)  # Close the database connection
+            except StopIteration:
+                pass
+    
+    def _get_conversation_history(self, chat_session_id: int, limit: int = 10) -> List[Dict[str, str]]:
+        """
+        Get conversation history for a chat session
+        
+        Args:
+            chat_session_id: ID of the chat session
+            limit: Maximum number of messages to return
+            
+        Returns:
+            List of message dictionaries with role and content
+        """
+        db_generator = get_db()
+        db = next(db_generator)
+        try:
+            message_repo = MessageRepository(db)
+            messages = message_repo.get_messages_by_session(
+                chat_session_id=chat_session_id,
+                limit=limit
+            )
+            
+            return [
+                {
+                    "role": "user" if msg.direction == MessageDirection.INCOMING else "assistant",
+                    "content": msg.content
+                }
+                for msg in messages
+            ]
+        finally:
+            try:
+                next(db_generator)  # Close the database connection
+            except StopIteration:
+                pass
+    
+    def _save_message(
+        self,
+        chat_session_id: int,
+        content: str,
+        direction: str,
+        message_type: str = "text",
+        whatsapp_message_id: Optional[str] = None
+    ) -> None:
+        """
+        Save a message to the database
+        
+        Args:
+            chat_session_id: ID of the chat session
+            content: Message content
+            direction: Message direction (incoming/outgoing)
+            message_type: Type of message (text, image, etc.)
+            whatsapp_message_id: Optional WhatsApp message ID
+        """
+        db_generator = get_db()
+        db = next(db_generator)
+        try:
+            message_repo = MessageRepository(db)
+            message_repo.create_message(
+                user_id=None,  # Will be set by the repository
+                chat_session_id=chat_session_id,
+                content=content,
+                direction=direction,
+                message_type=message_type,
+                whatsapp_message_id=whatsapp_message_id
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error saving message: {str(e)}")
+            raise
+        finally:
+            try:
+                next(db_generator)  # Close the database connection
+            except StopIteration:
+                pass
+    
     def process_incoming_message(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process incoming WhatsApp message

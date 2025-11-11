@@ -57,56 +57,40 @@ class ConversationService:
         step_data = self.flow.get(current_step, {})
         
         # Initialize response
-        response = {"message": "", "next_step": None, "data": state.get("data", {})}
+        response = {"message": None, "next_step": None, "data": state.get("data", {})}
         
-        # Handle AI conversation mode
+        # Handle initial greeting - any response is considered authorization
+        if current_step == "initial_greeting":
+            # If user responds to the greeting (even if not exactly "sí"), move to AI conversation
+            self.update_conversation_state(user_id, {
+                "current_step": "ai_conversation",
+                "data": {
+                    **state.get("data", {}),
+                    "data_authorized": True,
+                    "conversation_started": True
+                }
+            })
+            response["next_step"] = "ai_conversation"
+            return response
+            
+        # Handle AI conversation mode - all messages go to the AI
         if current_step == "ai_conversation":
             response["message"] = None  # Will be handled by OllamaService
             return response
             
-        # Handle data authorization
-        if current_step == "data_authorization" and user_input.lower() in ("sí", "si", "s"):
-            self.update_conversation_state(user_id, {"current_step": "ai_conversation"})
-            response["message"] = None  # Will be handled by OllamaService
-            return response
-            
-        # Handle insurance selection
-        if current_step == "insurance_selection":
-            if user_input.isdigit() and 1 <= int(user_input) <= 3:
-                insurance_type = {
-                    "1": "Seguro de Hogar 'Vive Tranqui'",
-                    "2": "Seguro Oncológico 'Venzamos'",
-                    "3": "Seguro para Mascotas 'Peludito'"
-                }.get(user_input, "seguro")
-                self.update_conversation_state(user_id, {
-                    "current_step": "ai_conversation",
-                    "data": {**state.get("data", {}), "selected_insurance": insurance_type}
-                })
-                response["message"] = None  # Will be handled by OllamaService
-                return response
-        
-        # Handle other steps with predefined messages
+        # For any other steps, just return the message if it exists
         if "message" in step_data:
             response["message"] = step_data["message"]
             
-            # Add options if available
-            if "options" in step_data:
-                options = step_data["options"]
-                if isinstance(options, dict):
-                    response["message"] += "\n\nOpciones:\n" + "\n".join([f"{k}. {v}" for k, v in options.items()])
-                elif isinstance(options, list):
-                    response["message"] += "\n\nOpciones:\n" + "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(options)])
-            
-            # Update next step
+            # Update next step if specified
             if "next_step" in step_data:
                 next_step = step_data["next_step"]
                 if isinstance(next_step, dict):
-                    if user_input.lower() in next_step:
-                        response["next_step"] = next_step[user_input.lower()]
+                    response["next_step"] = next_step.get(user_input.lower())
                 else:
                     response["next_step"] = next_step
         
-        # Update conversation state
+        # Update conversation state if we have a next step
         if response["next_step"]:
             self.update_conversation_state(user_id, {"current_step": response["next_step"]})
             
