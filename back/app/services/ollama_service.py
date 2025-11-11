@@ -132,6 +132,66 @@ Tienes acceso a los siguientes seguros:
                 prompt += f"\nTeléfono del cliente: {user_context['phone']}"
                 
         return prompt
+        
+    def _call_ollama_api(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Call the Ollama API to generate a response
+        
+        Args:
+            messages: List of message dictionaries with 'role' and 'content'
+            
+        Returns:
+            Generated response text
+            
+        Raises:
+            OllamaError: If there's an error generating the response
+            ServiceUnavailableError: If the Ollama service is not available
+        """
+        try:
+            # Prepare the API URL
+            url = f"{self.base_url}/api/chat"
+            
+            # Prepare the request payload
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": self.temperature,
+                    "num_predict": self.max_tokens
+                }
+            }
+            
+            logger.info(f"Calling Ollama API with model: {self.model}")
+            
+            # Make the API request
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            # Check for errors
+            response.raise_for_status()
+            
+            # Parse the response
+            result = response.json()
+            
+            # Extract the generated message
+            if "message" in result and "content" in result["message"]:
+                return result["message"]["content"].strip()
+            else:
+                error_msg = f"Unexpected response format from Ollama API: {result}"
+                logger.error(error_msg)
+                raise OllamaError(error_msg)
+                
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error calling Ollama API: {str(e)}"
+            logger.error(error_msg)
+            if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+                raise ServiceUnavailableError("Ollama service is currently unavailable. Please try again later.")
+            else:
+                raise OllamaError(error_msg)
         try:
             # Build conversation context
             messages = self._build_conversation_context(

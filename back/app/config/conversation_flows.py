@@ -5,11 +5,20 @@ Conversation flow configurations for different AI personalities
 # Default conversation flow for ISA
 DEFAULT_ISA_FLOW = {
     "initial_greeting": {
-        "message": "¡Hola! Soy ISA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.\n\nAntes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.",
-        "next_step": "ai_conversation"
+        "message": "¡Hola! Soy ISA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.\n\nAntes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.\n\nPor favor responde con 'sí' para continuar o 'no' si no deseas continuar.",
+        "next_step": "waiting_authorization"
+    },
+    "waiting_authorization": {
+        "message": "Gracias por tu respuesta. Para continuar con la conversación, necesito que confirmes tu autorización respondiendo 'sí'.",
+        "next_step": {
+            "sí": "ai_conversation",
+            "si": "ai_conversation",
+            "s": "ai_conversation"
+        }
     },
     "ai_conversation": {
-        "message": None  # Handled by OllamaService
+        "message": "¡Perfecto! Ahora puedo ayudarte con cualquier consulta sobre nuestros seguros. ¿En qué puedo ayudarte hoy? 😊",
+        "next_step": "ai_conversation"
     },
     "home_insurance_flow": {
         "message": "¡Excelente elección! El Seguro de Hogar 'Vive Tranqui' te brinda protección completa para tu hogar. Para ofrecerte la mejor cotización, necesito algunos datos:",
