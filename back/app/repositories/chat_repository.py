@@ -149,6 +149,26 @@ class MessageRepository(BaseRepository[Message]):
         """Get message by external provider ID (email, etc.)"""
         return self.get_by_field("external_id", external_id)
     
+    def get_messages_by_session(
+        self,
+        chat_session_id: int,
+        limit: int = 10
+    ) -> List[Message]:
+        """
+        Get messages for a chat session with the given session ID
+        
+        Args:
+            chat_session_id: ID of the chat session
+            limit: Maximum number of messages to return
+            
+        Returns:
+            List of Message objects
+        """
+        return self.get_session_messages(
+            session_id=chat_session_id,
+            limit=limit
+        )
+        
     def get_session_messages(
         self,
         session_id: int,
