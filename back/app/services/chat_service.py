@@ -113,7 +113,8 @@ class ChatService:
         content: str,
         direction: str,
         message_type: str = "text",
-        whatsapp_message_id: Optional[str] = None
+        whatsapp_message_id: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> None:
         """
         Save a message to the database
@@ -124,13 +125,25 @@ class ChatService:
             direction: Message direction (incoming/outgoing)
             message_type: Type of message (text, image, etc.)
             whatsapp_message_id: Optional WhatsApp message ID
+            user_id: Optional user ID. If not provided, will try to get it from the chat session
         """
         db_generator = get_db()
         db = next(db_generator)
         try:
             message_repo = MessageRepository(db)
+            chat_repo = ChatRepository(db)
+            
+            # If user_id is not provided, try to get it from the chat session
+            if user_id is None:
+                chat_session = chat_repo.get_by_id(chat_session_id)
+                if chat_session:
+                    user_id = chat_session.user_id
+            
+            if user_id is None:
+                raise ValueError("Could not determine user_id for message")
+            
             message_repo.create_message(
-                user_id=None,  # Will be set by the repository
+                user_id=user_id,
                 chat_session_id=chat_session_id,
                 content=content,
                 direction=direction,
