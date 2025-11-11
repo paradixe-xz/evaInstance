@@ -51,6 +51,19 @@ class WhatsAppService:
         logger.warning(f"Webhook verification failed: mode={mode}, token={token}")
         return None
     
+    def send_message(self, to: str, message: str) -> Dict[str, Any]:
+        """
+        Alias for send_text_message for backward compatibility
+        
+        Args:
+            to: Recipient phone number
+            message: Message text
+            
+        Returns:
+            API response
+        """
+        return self.send_text_message(to, message)
+        
     def send_text_message(self, to: str, message: str) -> Dict[str, Any]:
         """
         Send a text message
