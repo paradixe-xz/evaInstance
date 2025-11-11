@@ -135,7 +135,7 @@ class ChatService:
             
             # If user_id is not provided, try to get it from the chat session
             if user_id is None:
-                chat_session = chat_repo.get_by_id(chat_session_id)
+                chat_session = chat_repo.get(chat_session_id)
                 if chat_session:
                     user_id = chat_session.user_id
             
