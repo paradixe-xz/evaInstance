@@ -203,6 +203,7 @@ class OllamaService:
             
             # Build prompt from messages
             # For "ema" model, don't include system prompt - let modelfile handle it
+            # Also filter out any assistant messages that mention seguros/insurance
             prompt_parts = []
             for msg in messages:
                 if msg["role"] == "system":
@@ -211,9 +212,15 @@ class OllamaService:
                     if self.model != "ema" and msg.get("content"):
                         prompt_parts.append(f"System: {msg['content']}")
                 elif msg["role"] == "user":
+                    # Always include user messages
                     prompt_parts.append(f"User: {msg['content']}")
                 elif msg["role"] == "assistant":
-                    prompt_parts.append(f"Assistant: {msg['content']}")
+                    # Filter out assistant messages that mention seguros/insurance
+                    content = msg.get("content", "")
+                    if not any(word in content.lower() for word in ["seguro", "insurance", "vive tranqui", "venzamos", "peludito"]):
+                        prompt_parts.append(f"Assistant: {content}")
+                    else:
+                        logger.warning(f"Filtered out contaminated assistant message: {content[:50]}...")
             
             full_prompt = "\n".join(prompt_parts) + "\nAssistant:"
             

@@ -223,6 +223,23 @@ class ChatService:
                 chat_session = self._get_or_create_chat_session(user_id)
                 history = self._get_conversation_history(chat_session.id)
                 
+                # Filter out any messages that mention seguros/insurance to avoid contamination
+                # Also, if this is a new conversation (just started), don't use old history
+                if history:
+                    # Check if conversation just started (less than 2 messages in history)
+                    if len(history) <= 2:
+                        # For new conversations, start fresh - don't use old contaminated history
+                        history = []
+                        logger.info("New conversation detected, starting with clean history")
+                    else:
+                        # Filter out contaminated messages
+                        history = [
+                            msg for msg in history 
+                            if not any(word in msg.get("content", "").lower() 
+                                     for word in ["seguro", "insurance", "vive tranqui", "venzamos", "peludito", "seguros mundial"])
+                        ]
+                        logger.info(f"Filtered history, remaining messages: {len(history)}")
+                
                 # Save incoming message to database first
                 self._save_message(
                     chat_session_id=chat_session.id,
