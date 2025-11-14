@@ -1,0 +1,23 @@
+[Unit]
+Description=Eva AI Assistant Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/ruta/completa/al/proyecto/evaInstance/back
+Environment="PATH=/ruta/completa/al/proyecto/evaInstance/back/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/ruta/completa/al/proyecto/evaInstance/back/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eva-backend
+
+# Variables de entorno (opcional, si no usas .env)
+# Environment="DATABASE_URL=sqlite:///./whatsapp_ai.db"
+# Environment="OLLAMA_MODEL=ema"
+
+[Install]
+WantedBy=multi-user.target
+
