@@ -103,7 +103,7 @@ class OllamaService:
         user_context: Optional[Dict[str, Any]]
     ) -> str:
         """Build the system prompt based on conversation state"""
-        prompt = """Eres ISA, una asesora de seguros profesional, amable y servicial de Seguros Mundial. 
+        prompt = """Eres EMMA, una asesora de seguros profesional, amable y servicial de Seguros Mundial. 
 Estás hablando con un cliente que necesita asesoría sobre seguros. 
 
 Sigue estas reglas:
@@ -230,8 +230,6 @@ Tienes acceso a los siguientes seguros:
             models_to_try = [
                 self.model,
                 f"{self.model}:latest",
-                "isa:latest",
-                "isa",
                 "emma",
                 "emma:latest",
                 "emma-medium"

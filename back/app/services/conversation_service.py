@@ -16,12 +16,12 @@ logger = get_logger(__name__)
 class ConversationService:
     """Service for managing conversation state and flow"""
     
-    def __init__(self, conversation_flow: str = "isa"):
+    def __init__(self, conversation_flow: str = "emma"):
         """
         Initialize conversation service with a specific flow
         
         Args:
-            conversation_flow: Name of the conversation flow to use (default: 'isa')
+            conversation_flow: Name of the conversation flow to use (default: 'emma')
         """
         self.flow = get_flow(conversation_flow)
         self.conversation_states = {}
@@ -186,8 +186,8 @@ class ConversationService:
         """
         flow_path = self.flows_dir / f"{flow_name}.json"
         if not flow_path.exists():
-            # If the flow doesn't exist, return the default ISA flow
-            if flow_name == "isa":
+            # If the flow doesn't exist, return the default EMMA flow
+            if flow_name == "emma":
                 return DEFAULT_ISA_FLOW
             raise FileNotFoundError(f"Flow '{flow_name}' not found")
             
