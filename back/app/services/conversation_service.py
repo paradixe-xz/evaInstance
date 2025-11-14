@@ -67,51 +67,25 @@ class ConversationService:
             self.update_conversation_state(user_id, {"current_step": next_step})
             return response
         
-        # Handle explicit authorization step
+        # Handle explicit authorization step - for Ema flow, skip authorization and go directly to AI conversation
         if current_step == "waiting_authorization":
-            normalized_input = user_input.strip().lower()
-            affirmative_responses = {"sí", "si", "s", "yes", "y"}
-            negative_responses = {"no", "n"}
-            
-            if normalized_input in affirmative_responses:
-                updated_data = {
-                    **state.get("data", {}),
-                    "data_authorized": True,
-                    "conversation_started": True,
-                    "authorization_timestamp": datetime.utcnow().isoformat()
-                }
-                self.update_conversation_state(user_id, {
-                    "current_step": "ai_conversation",
-                    "data": updated_data
-                })
-                ai_step = self.flow.get("ai_conversation", {})
-                response["message"] = ai_step.get("message")
-                response["next_step"] = "ai_conversation"
-                response["data"] = updated_data
-                return response
-            
-            if normalized_input in negative_responses:
-                updated_data = {
-                    **state.get("data", {}),
-                    "data_authorized": False,
-                    "conversation_started": False
-                }
-                self.update_conversation_state(user_id, {"data": updated_data})
-                decline_message = step_data.get(
-                    "decline_message",
-                    "Entiendo. Si cambias de opinión y deseas continuar, por favor responde 'sí'."
-                )
-                response["message"] = decline_message
-                response["next_step"] = "waiting_authorization"
-                response["data"] = updated_data
-                return response
-            
-            # Unrecognized response - resend authorization prompt
-            response["message"] = step_data.get(
-                "message",
-                "Para continuar necesito tu autorización. Por favor responde 'sí' para confirmar."
-            )
-            response["next_step"] = "waiting_authorization"
+            logger.info(f"User {user_id} in waiting_authorization, moving to ai_conversation automatically")
+            # Automatically move to AI conversation without requiring authorization
+            # This matches the Ema flow which doesn't require data authorization
+            updated_data = {
+                **state.get("data", {}),
+                "conversation_started": True,
+                "start_timestamp": datetime.utcnow().isoformat()
+            }
+            self.update_conversation_state(user_id, {
+                "current_step": "ai_conversation",
+                "data": updated_data
+            })
+            # Return None message so it goes to AI conversation
+            response["message"] = None
+            response["next_step"] = "ai_conversation"
+            response["data"] = updated_data
+            logger.info(f"Updated state for {user_id} to ai_conversation")
             return response
         
         # Handle AI conversation mode - all messages go to the AI

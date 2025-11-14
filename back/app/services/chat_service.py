@@ -191,8 +191,21 @@ class ChatService:
             # Determine next step based on user input
             next_step = self.conversation_service.get_next_step(user_id, user_message)
             
-            # If we have a predefined message, send it
+            # If we have a predefined message, send it and save it to database
             if next_step.get("message"):
+                # Get or create chat session to save the message
+                chat_session = self._get_or_create_chat_session(user_id)
+                
+                # Save the outgoing message to database
+                self._save_message(
+                    chat_session_id=chat_session.id,
+                    content=next_step["message"],
+                    direction=MessageDirection.OUTGOING,
+                    message_type="text",
+                    user_id=chat_session.user_id
+                )
+                
+                # Send message via WhatsApp
                 self.whatsapp_service.send_message(
                     to=user_id,
                     message=next_step["message"]
@@ -201,14 +214,27 @@ class ChatService:
                 
             # Refresh conversation state after potential transitions
             conversation_state = self.conversation_service.get_conversation_state(user_id)
+            logger.info(f"Conversation state for {user_id}: {conversation_state.get('current_step')}")
             
             # If we're in AI conversation mode, generate a response using Ollama
             if conversation_state.get("current_step") == "ai_conversation":
+                logger.info(f"Generating AI response for {user_id} with message: {user_message[:100]}")
                 # Get conversation history from database
                 chat_session = self._get_or_create_chat_session(user_id)
                 history = self._get_conversation_history(chat_session.id)
                 
+                # Save incoming message to database first
+                self._save_message(
+                    chat_session_id=chat_session.id,
+                    content=user_message,
+                    direction=MessageDirection.INCOMING,
+                    message_type="text",
+                    whatsapp_message_id=parsed_message.get("message_id"),
+                    user_id=chat_session.user_id
+                )
+                
                 # Generate AI response
+                logger.info(f"Calling Ollama service with history length: {len(history) if history else 0}")
                 response = self.ollama_service.generate_response(
                     user_message=user_message,
                     conversation_history=history,
@@ -219,16 +245,13 @@ class ChatService:
                     conversation_state=conversation_state
                 )
                 
-                # Save messages to database
-                self._save_message(
-                    chat_session_id=chat_session.id,
-                    content=user_message,
-                    direction=MessageDirection.INCOMING,
-                    message_type="text",
-                    whatsapp_message_id=parsed_message.get("message_id"),
-                    user_id=chat_session.user_id
-                )
+                if not response:
+                    logger.error(f"Empty response from Ollama for {user_id}")
+                    response = "Lo siento, no pude generar una respuesta. ¿Podrías repetir tu mensaje?"
                 
+                logger.info(f"Generated response for {user_id}: {response[:100]}")
+                
+                # Save outgoing message to database
                 self._save_message(
                     chat_session_id=chat_session.id,
                     content=response,
@@ -243,6 +266,7 @@ class ChatService:
                     message=response
                 )
                 
+                logger.info(f"Response sent to {user_id} successfully")
                 return {"status": "success", "response": response}
                 
             return {"status": "success", "next_step": next_step.get("next_step")}
