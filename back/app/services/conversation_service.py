@@ -59,19 +59,9 @@ class ConversationService:
         # Initialize response
         response = {"message": None, "next_step": None, "data": state.get("data", {})}
         
-        # Handle initial greeting - send greeting and move to authorization step
+        # Handle initial greeting - go directly to AI conversation
         if current_step == "initial_greeting":
-            response["message"] = step_data.get("message")
-            next_step = step_data.get("next_step", "waiting_authorization")
-            response["next_step"] = next_step
-            self.update_conversation_state(user_id, {"current_step": next_step})
-            return response
-        
-        # Handle explicit authorization step - for Ema flow, skip authorization and go directly to AI conversation
-        if current_step == "waiting_authorization":
-            logger.info(f"User {user_id} in waiting_authorization, moving to ai_conversation automatically")
-            # Automatically move to AI conversation without requiring authorization
-            # This matches the Ema flow which doesn't require data authorization
+            # Move directly to AI conversation, let the AI model handle everything
             updated_data = {
                 **state.get("data", {}),
                 "conversation_started": True,
@@ -81,11 +71,10 @@ class ConversationService:
                 "current_step": "ai_conversation",
                 "data": updated_data
             })
-            # Return None message so it goes to AI conversation
-            response["message"] = None
+            response["message"] = None  # Let AI handle the greeting
             response["next_step"] = "ai_conversation"
             response["data"] = updated_data
-            logger.info(f"Updated state for {user_id} to ai_conversation")
+            logger.info(f"User {user_id} moved from initial_greeting to ai_conversation")
             return response
         
         # Handle AI conversation mode - all messages go to the AI

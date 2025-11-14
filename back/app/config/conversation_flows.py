@@ -2,14 +2,10 @@
 Conversation flow configurations for different AI personalities
 """
 
-# Default conversation flow for EMA
+# Default conversation flow for EMA - Simplified: direct to AI conversation
 DEFAULT_ISA_FLOW = {
     "initial_greeting": {
-        "message": "¡Hola! Soy Ema, tu asesora digital de Épico. 😊 ¿Podrías decirme tu nombre completo para comenzar?",
-        "next_step": "waiting_authorization"
-    },
-    "waiting_authorization": {
-        "message": None,
+        "message": None,  # Let the AI model handle the greeting
         "next_step": "ai_conversation"
     },
     "ai_conversation": {

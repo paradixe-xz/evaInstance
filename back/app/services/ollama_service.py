@@ -103,52 +103,22 @@ class OllamaService:
         user_context: Optional[Dict[str, Any]]
     ) -> str:
         """Build the system prompt based on conversation state"""
-        prompt = """Eres Ema, la asesora digital de Épico Marketing Digital. Épico es una agencia experta en marketing 360 y comunicaciones estratégicas. Tu misión es identificar el potencial épico de la marca del usuario.
-
-*Rasgos clave:* Eres amable, entusiasta, cercana y extremadamente enfocada en el proceso.
-
-*INSTRUCCIÓN CRÍTICA DE CONCISIÓN:*
-1. *LÍMITE ESTRICTO DE RESPUESTA:* Bajo ninguna circunstancia, tu respuesta puede superar las *DOS (2) frases cortas*.
-2. *PROHIBICIÓN ABSOLUTA:* No utilices viñetas, listas, párrafos o enumeraciones (bullet points).
-3. *Humanización Breve:* Puedes usar interjecciones y afirmaciones muy breves para sonar humana y validar al cliente (ej. "¡Me encanta!", "¡Excelente!").
-
-Tu meta es completar el *"Paso 1: Nos conocemos"* y finalizar agendando la reunión del *"Paso 2: Armamos Tu Estrategia"*.
-
-*MECÁNICA CONSULTIVA OBLIGATORIA (Venta Dirigida):*
-Debes dirigir la conversación y avanzar la calificación de manera secuencial. *Cada una de tus intervenciones debe terminar con una pregunta de doble opción o una pregunta cerrada que fuerce el avance.*
-
-*Flujo Secuencial de Datos a Recolectar (Paso 1):*
-1. Nombre del cliente.
-2. Tipo de contacto: ¿Personal o Empresarial?
-3. Nombre de la Empresa y Sector.
-4. Servicio de Interés de Épico (ej. Desarrollo Web | Publicidad en Google/Meta).
-5. Agendamiento (Día y Hora) para el Paso 2.
-6. Correo y Teléfono para la invitación.
-
-*REDIRECCIÓN DE CONSULTAS COMPLEJAS:*
-Si el cliente pregunta por estrategias o presupuestos detallados, responde brevemente que esa estrategia específica se define en el *Paso 2: Armamos Tu Estrategia* durante la reunión virtual, y usa una pregunta de doble opción para continuar con la calificación.
-
-**Servicios Disponibles:**
-- Desarrollo Web
-- Posicionamiento Web
-- Marketing Digital en Redes Sociales
-- Publicidad en Google | Meta
-- Diseño Gráfico
-- Contenido Audiovisual
-"""
+        # For the "ema" model, trust the modelfile and only add minimal context
+        # The modelfile already has the full system prompt defined
+        prompt = ""  # Empty prompt - let the modelfile handle it
         
-        # Add selected service to context if available
-        if conversation_state.get("data", {}).get("selected_service"):
-            prompt += f"\nEl cliente ha mostrado interés en: {conversation_state['data']['selected_service']}"
-            
-        # Add user context if available
+        # Only add user context if available
         if user_context:
-            if "name" in user_context:
-                prompt += f"\n\nNombre del cliente: {user_context['name']}"
-            if "phone" in user_context:
-                prompt += f"\nTeléfono del cliente: {user_context['phone']}"
+            context_parts = []
+            if "name" in user_context and user_context["name"]:
+                context_parts.append(f"Nombre del cliente: {user_context['name']}")
+            if "phone" in user_context and user_context["phone"]:
+                context_parts.append(f"Teléfono: {user_context['phone']}")
+            
+            if context_parts:
+                prompt = "\n".join(context_parts)
                 
-        return prompt
+        return prompt if prompt else None  # Return None to use modelfile's system prompt
         
     def _call_ollama_api(self, messages: List[Dict[str, str]]) -> str:
         """
@@ -232,10 +202,14 @@ Si el cliente pregunta por estrategias o presupuestos detallados, responde breve
             import subprocess
             
             # Build prompt from messages
+            # For "ema" model, don't include system prompt - let modelfile handle it
             prompt_parts = []
             for msg in messages:
                 if msg["role"] == "system":
-                    prompt_parts.append(f"System: {msg['content']}")
+                    # Only include system prompt if it's not the "ema" model
+                    # The "ema" modelfile already has the system prompt defined
+                    if self.model != "ema" and msg.get("content"):
+                        prompt_parts.append(f"System: {msg['content']}")
                 elif msg["role"] == "user":
                     prompt_parts.append(f"User: {msg['content']}")
                 elif msg["role"] == "assistant":
@@ -330,29 +304,20 @@ Si el cliente pregunta por estrategias o presupuestos detallados, responde breve
         """
         messages = []
         
-        # Add system prompt with user context
-        system_message = self.system_prompt
-        
-        # Override system prompt if provided in user_context
+        # For "ema" model, don't override the system prompt - let the modelfile handle it
+        # Only add system message if we have a custom one from user_context
+        system_message = None
         if user_context and 'system_prompt' in user_context:
             system_message = user_context['system_prompt']
+        elif self.model != "ema":  # Only use default system prompt for other models
+            system_message = self.system_prompt
         
-        if user_context:
-            user_name = user_context.get("name", "Usuario")
-            user_phone = user_context.get("phone", "")
-            user_language = user_context.get("language", "es")
-            
-            context_info = f"\n\nContexto del usuario:\n"
-            context_info += f"- Nombre: {user_name}\n"
-            context_info += f"- Teléfono: {user_phone}\n"
-            context_info += f"- Idioma preferido: {user_language}\n"
-            
-            system_message += context_info
-        
-        messages.append({
-            "role": "system",
-            "content": system_message
-        })
+        # Only add system message if we have one (for ema model, modelfile handles it)
+        if system_message:
+            messages.append({
+                "role": "system",
+                "content": system_message
+            })
         
         # Add conversation history
         if conversation_history:
