@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # Ollama Settings
     ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="isa", env="OLLAMA_MODEL")
+    ollama_model: str = Field(default="emma", env="OLLAMA_MODEL")
     ollama_system_prompt: str = Field(
         default="Eres ISA, la mejor vendedora de seguros de Seguros Mundial. Tu objetivo es cerrar la venta del seguro que mejor se adapte a las necesidades del cliente, creando una necesidad emocional urgente de protección. Sigue el flujo conversacional establecido y aplica técnicas de venta efectivas.",
         env="OLLAMA_SYSTEM_PROMPT"
