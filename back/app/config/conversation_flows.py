@@ -2,19 +2,15 @@
 Conversation flow configurations for different AI personalities
 """
 
-# Default conversation flow for EMMA
+# Default conversation flow for EMA
 DEFAULT_ISA_FLOW = {
     "initial_greeting": {
-        "message": "¡Hola! Soy EMMA, tu asesora experta de Seguros Mundial. 😊 Gracias por contactarnos.\n\nAntes de continuar, necesito tu autorización para el manejo de datos personales. ¿Me autorizas a usar tu información únicamente para ofrecerte los mejores seguros y asesoría personalizada?\n\n📌 Recuerda: Tu información está protegida bajo la normativa de protección de datos.\n\nPor favor responde con 'sí' para continuar o 'no' si no deseas continuar.",
+        "message": "¡Hola! Soy Ema, tu asesora digital de Épico. 😊 ¿Podrías decirme tu nombre completo para comenzar?",
         "next_step": "waiting_authorization"
     },
     "waiting_authorization": {
-        "message": "Gracias por tu respuesta. Para continuar con la conversación, necesito que confirmes tu autorización respondiendo 'sí'.",
-        "next_step": {
-            "sí": "ai_conversation",
-            "si": "ai_conversation",
-            "s": "ai_conversation"
-        }
+        "message": None,
+        "next_step": "ai_conversation"
     },
     "ai_conversation": {
         "message": None,
@@ -60,7 +56,8 @@ DEFAULT_ISA_FLOW = {
 
 # Add more flows as needed
 CONVERSATION_FLOWS = {
-    "emma": DEFAULT_ISA_FLOW,
+    "ema": DEFAULT_ISA_FLOW,
+    "emma": DEFAULT_ISA_FLOW,  # Keep for backward compatibility
     "isa": DEFAULT_ISA_FLOW,  # Keep for backward compatibility
     # Add other flows here
 }
