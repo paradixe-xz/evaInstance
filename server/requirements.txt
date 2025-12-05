@@ -27,8 +27,10 @@ structlog==23.2.0
 
 # Audio and speech processing (for calls)
 twilio
-speechrecognition
+SpeechRecognition
 pydub
+edge-tts
+PyAudio
 
 # SIP Trunk support
 aiosip
@@ -38,6 +40,6 @@ ollama
 apscheduler
 psutil
 
-# TTS
-# TTS
-TTS
+# TTS Engines
+# TTS (Coqui) - No compatible con Python 3.12+, comentado
+# Usar edge-tts en su lugar (ya incluido arriba)

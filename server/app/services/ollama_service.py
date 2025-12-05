@@ -103,7 +103,7 @@ class OllamaService:
         user_context: Optional[Dict[str, Any]]
     ) -> str:
         """Build the system prompt based on conversation state"""
-        # For the "ema" model, trust the modelfile and only add minimal context
+        # For the "isa" model, trust the modelfile and only add minimal context
         # The modelfile already has the full system prompt defined
         prompt = ""  # Empty prompt - let the modelfile handle it
         
@@ -207,9 +207,9 @@ class OllamaService:
             prompt_parts = []
             for msg in messages:
                 if msg["role"] == "system":
-                    # Only include system prompt if it's not the "ema" model
-                    # The "ema" modelfile already has the system prompt defined
-                    if self.model != "ema" and msg.get("content"):
+                    # Only include system prompt if it's not the "isa" model
+                    # The "isa" modelfile already has the system prompt defined
+                    if self.model != "isa" and msg.get("content"):
                         prompt_parts.append(f"System: {msg['content']}")
                 elif msg["role"] == "user":
                     # Always include user messages
@@ -228,8 +228,8 @@ class OllamaService:
             models_to_try = [
                 self.model,
                 f"{self.model}:latest",
-                "ema",
-                "ema:latest"
+                "isa",
+                "isa:latest"
             ]
             
             ai_response = None
@@ -316,7 +316,7 @@ class OllamaService:
         system_message = None
         if user_context and 'system_prompt' in user_context:
             system_message = user_context['system_prompt']
-        elif self.model != "ema":  # Only use default system prompt for other models
+        elif self.model != "isa":  # Only use default system prompt for other models
             system_message = self.system_prompt
         
         # Only add system message if we have one (for ema model, modelfile handles it)
@@ -505,8 +505,8 @@ class OllamaService:
             models_to_try = [
                 self.model,
                 f"{self.model}:latest",
-                "ema",
-                "ema:latest"
+                "isa",
+                "isa:latest"
             ]
             
             for model_name in models_to_try:
