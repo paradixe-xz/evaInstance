@@ -136,7 +136,7 @@ class OllamaService:
         """
         try:
             # Prepare the API URL
-            url = f"{self.base_url}/api/chat"
+            url = f"https://e3wqzrioehw2l6-11434.proxy.runpod.net/api/chat"
             
             # Prepare the request payload
             payload = {
