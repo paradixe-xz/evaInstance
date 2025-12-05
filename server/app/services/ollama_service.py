@@ -3,13 +3,17 @@ Ollama AI service for generating responses
 """
 
 import json
-import requests
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import os
 
-# Disable ollama client to avoid HTTP daemon calls
-ollama_client = None
+# Import ollama library
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    ollama = None
 
 from ..core.config import get_settings
 from ..core.logging import get_logger
@@ -122,7 +126,7 @@ class OllamaService:
         
     def _call_ollama_api(self, messages: List[Dict[str, str]]) -> str:
         """
-        Call the Ollama API to generate a response
+        Call Ollama using the Python library
         
         Args:
             messages: List of message dictionaries with 'role' and 'content'
@@ -135,50 +139,35 @@ class OllamaService:
             ServiceUnavailableError: If the Ollama service is not available
         """
         try:
-            # Prepare the API URL
-            url = f"https://e3wqzrioehw2l6-11434.proxy.runpod.net/api/chat"
+            if not OLLAMA_AVAILABLE:
+                raise ServiceUnavailableError("Ollama library not available. Install with: pip install ollama")
             
-            # Prepare the request payload
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "stream": False,
-                "options": {
+            logger.info(f"Calling Ollama with model: {self.model}")
+            
+            # Use ollama library to chat
+            response = ollama.chat(
+                model=self.model,
+                messages=messages,
+                options={
                     "temperature": self.temperature,
                     "num_predict": self.max_tokens
                 }
-            }
-            
-            logger.info(f"Calling Ollama API with model: {self.model}")
-            
-            # Make the API request
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=self.timeout
             )
             
-            # Check for errors
-            response.raise_for_status()
-            
-            # Parse the response
-            result = response.json()
-            
-            # Extract the generated message
-            if "message" in result and "content" in result["message"]:
-                return result["message"]["content"].strip()
+            # Extract the response content
+            if response and "message" in response and "content" in response["message"]:
+                ai_response = response["message"]["content"].strip()
+                logger.info(f"✅ Got response from Ollama: {ai_response[:100]}...")
+                return ai_response
             else:
-                error_msg = f"Unexpected response format from Ollama API: {result}"
+                error_msg = f"Unexpected response format from Ollama: {response}"
                 logger.error(error_msg)
                 raise OllamaError(error_msg)
                 
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Error calling Ollama API: {str(e)}"
+        except Exception as e:
+            error_msg = f"Error calling Ollama: {str(e)}"
             logger.error(error_msg)
-            if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
-                raise ServiceUnavailableError("Ollama service is currently unavailable. Please try again later.")
-            else:
-                raise OllamaError(error_msg)
+            raise OllamaError(error_msg)
         try:
             # Build conversation context
             messages = self._build_conversation_context(
