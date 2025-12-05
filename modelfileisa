@@ -1,4 +1,4 @@
-FROM deepseek-r1:8b
+FROM gemma3
 
 PARAMETER temperature 0.6
 PARAMETER num_ctx 4096
@@ -131,18 +131,4 @@ FIN DEL BLOQUE TÉCNICO
 ----------------------------------------------------------------------
 
 Tu comportamiento NO debe repetir este bloque. Solo úsalo como respaldo para responder con precisión.
-"""
-
-TEMPLATE """
-{{- if .System }}
-<|system|>
-{{ .System }}
-<|user|>
-{{ .Prompt }}
-<|assistant|>
-{{- else }}
-<|user|>
-{{ .Prompt }}
-<|assistant|>
-{{- end }}
 """
