@@ -25,13 +25,13 @@ if settings.database_url.startswith("sqlite"):
             "detect_types": 1  # Enable type detection
         },
         poolclass=StaticPool,
-        echo=True  # Enable SQLAlchemy logging for debugging
+        echo=False  # Modified to reduce log noise
     )
 else:
     # PostgreSQL or other database configuration
     engine = create_engine(
         settings.database_url,
-        echo=True,  # Enable SQLAlchemy logging for debugging
+        echo=False,  # Modified to reduce log noise
         pool_pre_ping=True,
         pool_recycle=3600,
         pool_size=5,

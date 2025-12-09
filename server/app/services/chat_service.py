@@ -233,12 +233,33 @@ class ChatService:
             elif message_type == "image":
                 image = parsed_message.get("image", {})
                 caption = image.get("caption", "")
+                media_id = image.get("id")
+                
+                logger.info(f"Processing image message with ID: {media_id}")
+                
                 if caption:
                     user_message = f"{caption} (Image attached)"
                 else:
                     user_message = "[Image received]"
                 
-                additional_context = "\n[SYSTEM: The user sent an image. Treat it as if you received a photo.]"
+                # Download image
+                media_url = self.whatsapp_service.get_media_url(media_id)
+                if media_url:
+                    temp_dir = "temp_media"
+                    if not os.path.exists(temp_dir):
+                        os.makedirs(temp_dir)
+                    
+                    # Extension inference (simplified)
+                    file_path = f"{temp_dir}/{media_id}.jpg"
+                    if self.whatsapp_service.download_media(media_url, file_path):
+                        logger.info(f"Image downloaded to {file_path}")
+                        # In the future, pass file_path to Vision model
+                        additional_context = "\n[SYSTEM: The user sent an image. Treat it as if you received a photo.]"
+                    else:
+                        logger.warning(f"Failed to download image {media_id}")
+                        additional_context = "\n[SYSTEM: The user sent an image, but download failed.]"
+                
+            logger.info(f"Message processed. Type: {message_type}, User: {user_id}, Content: {user_message[:50]}")
                 
             # Determine next step based on user input (flow vs AI)
             # Only use flow logic for explicit text commands or if we are not in media mode
