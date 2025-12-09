@@ -1,5 +1,5 @@
 // API base URL - update this with your actual backend URL
-export const API_BASE_URL = 'http://localhost:8000/api/v1';
+export const API_BASE_URL = '/api/v1';
 
 export const API_ENDPOINTS = {
   AUTH: {
