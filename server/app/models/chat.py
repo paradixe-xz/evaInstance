@@ -21,6 +21,7 @@ class MessageType(str, Enum):
     CONTACT = "contact"
     STICKER = "sticker"
     SYSTEM = "system"
+    TEMPLATE = "template"
 
 
 class MessageDirection(str, Enum):

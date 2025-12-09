@@ -696,7 +696,7 @@ class ChatService:
                     "chat_session_id": active_session.id,
                     "whatsapp_message_id": whatsapp_response.get("messages", [{}])[0].get("id"),
                     "direction": MessageDirection.OUTGOING,
-                    "message_type": "template",
+                    "message_type": MessageType.TEMPLATE,
                     "content": content,
                     "raw_content": str({
                         "whatsapp_response": whatsapp_response,
