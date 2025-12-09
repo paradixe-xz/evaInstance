@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Send, Phone, MoreVertical, User, Check, CheckCheck, Loader2, Upload, FileText } from 'lucide-react';
+import { Search, Send, Phone, MoreVertical, User, Check, CheckCheck, Loader2, Upload, FileText, Download, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
@@ -38,6 +38,10 @@ interface Message {
     is_read: boolean;
     is_delivered: boolean;
     message_type: string;
+    media_url?: string;
+    media_mime_type?: string;
+    media_local_path?: string;
+    media_filename?: string;
 }
 
 interface ChatHistoryResponse {
@@ -363,6 +367,48 @@ export function WhatsAppPage() {
                                                         : "bg-white text-gray-900 rounded-tl-none"
                                                 )}
                                             >
+                                                {/* Render Image */}
+                                                {msg.message_type === 'image' && msg.media_local_path && (
+                                                    <div className="mb-2">
+                                                        <img
+                                                            src={`${import.meta.env.VITE_API_URL}/api/v1/media/${msg.media_filename || msg.media_local_path.split('/').pop()}`}
+                                                            alt="Image"
+                                                            className="rounded-lg max-w-full h-auto max-h-96 object-contain"
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = 'none';
+                                                                e.currentTarget.nextElementSibling!.classList.remove('hidden');
+                                                            }}
+                                                        />
+                                                        <div className="hidden flex items-center gap-2 p-2 bg-gray-100 rounded text-gray-500">
+                                                            <ImageIcon className="h-4 w-4" />
+                                                            <span className="text-xs">Error al cargar imagen</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Render Document */}
+                                                {msg.message_type === 'document' && msg.media_local_path && (
+                                                    <a
+                                                        href={`${import.meta.env.VITE_API_URL}/api/v1/media/${msg.media_filename || msg.media_local_path.split('/').pop()}`}
+                                                        download={msg.media_filename}
+                                                        className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors mb-2"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                                                {msg.media_filename || 'Documento'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">
+                                                                {msg.media_mime_type || 'Archivo'}
+                                                            </p>
+                                                        </div>
+                                                        <Download className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                                    </a>
+                                                )}
+
+                                                {/* Text Content */}
                                                 <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                                                     {msg.content}
                                                 </p>

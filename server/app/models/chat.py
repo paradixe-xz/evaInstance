@@ -143,6 +143,8 @@ class Message(Base):
     media_url = Column(String(500), nullable=True)
     media_mime_type = Column(String(100), nullable=True)
     media_size = Column(Integer, nullable=True)
+    media_local_path = Column(String(500), nullable=True)  # Local file path on server
+    media_filename = Column(String(255), nullable=True)  # Original filename
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -179,6 +181,8 @@ class Message(Base):
             "media_url": self.media_url,
             "media_mime_type": self.media_mime_type,
             "media_size": self.media_size,
+            "media_local_path": self.media_local_path,
+            "media_filename": self.media_filename,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

@@ -8,13 +8,14 @@ api_router = APIRouter()
 
 def init_routers():
     """Initialize all API routers to avoid circular imports"""
-    from .endpoints import whatsapp, chat, calls, sip, email
+    from .endpoints import whatsapp, chat, calls, sip, email, media
     from .endpoints.conversation_flows import router as conversation_flows_router
     from . import auth, campaigns, agents, knowledge, analytics, health, webhooks
     
     # Include routers
     api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["WhatsApp"])
     api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])
+    api_router.include_router(media.router, prefix="/media", tags=["Media"])
     api_router.include_router(calls.router, prefix="/calls", tags=["Calls"])
     api_router.include_router(sip.router, prefix="/sip", tags=["SIP Trunks"])
     api_router.include_router(email.router, prefix="/email", tags=["Email"])

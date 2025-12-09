@@ -218,22 +218,25 @@ class ChatService:
                             
                         file_path = f"{temp_dir}/{media_id}_{filename}"
                         if self.whatsapp_service.download_media(media_url, file_path):
+                            # Store media metadata for database
+                            media_metadata = {
+                                "url": document.get("url", media_url),
+                                "mime_type": mime_type,
+                                "local_path": file_path,
+                                "filename": filename
+                            }
+                            
                             extracted_text = self._extract_text_from_pdf(file_path)
                             if extracted_text:
                                 # Truncate if too long (e.g., 2000 chars)
                                 additional_context = f"\n[SYSTEM: The user sent a PDF document named '{filename}'. Extracted Content: {extracted_text[:2000]}...]"
                                 logger.info(f"Extracted text from PDF {filename}")
-                            
-                            # Clean up
-                            try:
-                                os.remove(file_path)
-                            except:
-                                pass
             
             elif message_type == "image":
                 image = parsed_message.get("image", {})
                 caption = image.get("caption", "")
                 media_id = image.get("id")
+                mime_type = image.get("mime_type", "image/jpeg")
                 
                 logger.info(f"Processing image message with ID: {media_id}")
                 
@@ -252,6 +255,14 @@ class ChatService:
                     # Extension inference (simplified)
                     file_path = f"{temp_dir}/{media_id}.jpg"
                     if self.whatsapp_service.download_media(media_url, file_path):
+                        # Store media metadata for database
+                        media_metadata = {
+                            "url": image.get("url", media_url),
+                            "mime_type": mime_type,
+                            "local_path": file_path,
+                            "filename": f"{media_id}.jpg"
+                        }
+                        
                         logger.info(f"Image downloaded to {file_path}")
                         # In the future, pass file_path to Vision model
                         additional_context = "\n[SYSTEM: The user sent an image. Treat it as if you received a photo.]"
@@ -312,6 +323,16 @@ class ChatService:
                 # Since we updated models, we trust simple strings or Enum
                 db_message_type = message_type if message_type in ["text", "image", "document", "template"] else "text"
                 
+                # Prepare media fields if available
+                media_fields = {}
+                if media_metadata:
+                    media_fields = {
+                        "media_url": media_metadata.get("url"),
+                        "media_mime_type": media_metadata.get("mime_type"),
+                        "media_local_path": media_metadata.get("local_path"),
+                        "media_filename": media_metadata.get("filename")
+                    }
+                
                 incoming_message = message_repo.create_message(
                     user_id=user.id,
                     chat_session_id=active_session.id,
@@ -319,7 +340,8 @@ class ChatService:
                     direction=MessageDirection.INCOMING,
                     message_type=db_message_type,
                     whatsapp_message_id=whatsapp_message_id,
-                    raw_content=str(parsed_message)
+                    raw_content=str(parsed_message),
+                    **media_fields
                 )
                 
                 # Mark as read
