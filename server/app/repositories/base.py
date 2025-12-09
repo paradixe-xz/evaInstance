@@ -46,10 +46,10 @@ class BaseRepository(Generic[ModelType]):
         except (AttributeError, SQLAlchemyError) as e:
             raise DatabaseError(f"Error getting {self.model.__name__} by {field_name}: {str(e)}")
     
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[ModelType]:
+    def get_all(self, limit: int = 100, offset: int = 0) -> List[ModelType]:
         """Get all records with pagination"""
         try:
-            return self.db.query(self.model).offset(skip).limit(limit).all()
+            return self.db.query(self.model).offset(offset).limit(limit).all()
         except SQLAlchemyError as e:
             raise DatabaseError(f"Error getting all {self.model.__name__}: {str(e)}")
     
