@@ -25,8 +25,8 @@ from .core.exceptions import (
 from .middleware import LoggingMiddleware
 from .api.v1 import api_router
 
-# Setup logging without console output
-setup_logging(enable_console=False)
+# Setup logging with console output enabled for debugging
+setup_logging(enable_console=True)
 logger = get_logger(__name__)
 
 # Get settings
