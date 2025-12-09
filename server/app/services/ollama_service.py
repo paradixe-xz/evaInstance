@@ -506,6 +506,7 @@ class OllamaService:
                 "isa:latest"
             ]
             
+            
             for model_name in models_to_try:
                 try:
                     cmd = ["ollama", "run", model_name, full_prompt]
@@ -520,6 +521,9 @@ class OllamaService:
                     if result.returncode == 0 and result.stdout.strip():
                         summary = result.stdout.strip()
                         return summary[:max_length]
+                except Exception:
+                    continue
+            
             return ""
                 
         except Exception as e:
