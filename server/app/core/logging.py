@@ -33,12 +33,15 @@ def setup_logging(
     log_level = log_level or settings.log_level
     log_file = log_file or settings.log_file_path
     
-    # Create logger
-    logger = logging.getLogger("whatsapp_ai")
+    # Create logger (configure ROOT logger to capture everything)
+    logger = logging.getLogger()
     logger.setLevel(getattr(logging, log_level.upper()))
     
-    # Clear existing handlers
-    logger.handlers.clear()
+    # Clear existing handlers to avoid duplicates (e.g. from uvicorn)
+    # Be careful not to remove handlers we actually want, but generally for our app we want to control it.
+    # However, Uvicorn adds its own. Let's just add ours if missing or rely on propagation.
+    # Safer approach: Configure "app" logger specifically if we want to isolate, or root if we want everything.
+    # Let's configure the root logger essentially.
     
     # Create formatter
     formatter = logging.Formatter(
@@ -48,10 +51,13 @@ def setup_logging(
     
     # Console handler (only if enabled)
     if enable_console:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(getattr(logging, log_level.upper()))
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+        # Check if we already have a stream handler to avoid duplicates
+        has_console = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
+        if not has_console:
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(getattr(logging, log_level.upper()))
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
     
     # File handler (always enabled)
     if log_file:
@@ -61,6 +67,7 @@ def setup_logging(
             os.makedirs(log_dir, exist_ok=True)
         
         # Rotating file handler
+        # Check uniqueness isn't strictly necessary if we are re-initializing, but good practice
         file_handler = logging.handlers.RotatingFileHandler(
             log_file,
             maxBytes=int(settings.log_max_size),
@@ -79,10 +86,6 @@ def setup_logging(
     # Enable uvicorn access logs for debugging
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
-    
-    # Set root logger level
-    if not enable_console:
-        logging.getLogger().setLevel(logging.WARNING)
     
     return logger
 
