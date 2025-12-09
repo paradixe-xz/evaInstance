@@ -143,6 +143,10 @@ class UserRepository(BaseRepository[User]):
     def unblock_user(self, user_id: int) -> Optional[User]:
         """Unblock a user"""
         return self.update(user_id, {"is_blocked": False})
+
+    def toggle_ai_status(self, user_id: int, paused: bool) -> Optional[User]:
+        """Toggle AI status for a user"""
+        return self.update(user_id, {"ai_paused": paused})
     
     def deactivate_user(self, user_id: int) -> Optional[User]:
         """Deactivate a user"""

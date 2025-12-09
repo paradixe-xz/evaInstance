@@ -341,3 +341,35 @@ async def unblock_user(user_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Unblock user error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+from pydantic import BaseModel
+
+class AIStatusUpdate(BaseModel):
+    ai_paused: bool
+
+@router.patch("/user/{user_id}/ai-status")
+async def update_ai_status(
+    user_id: int, 
+    status_update: AIStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update user's AI paused status
+    """
+    try:
+        logger.info(f"Updating AI status for user {user_id} to {status_update.ai_paused}")
+        
+        user_repo = UserRepository(db)
+        
+        user = user_repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_repo.toggle_ai_status(user_id, status_update.ai_paused)
+        
+        return {"status": "success", "ai_paused": status_update.ai_paused}
+        
+    except Exception as e:
+        logger.error(f"Update AI status error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -181,6 +181,17 @@ export const chatService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  updateUserAiStatus: async (userId: number, paused: boolean) => {
+    try {
+      const response = await api.patch(API_ENDPOINTS.CHAT.USER_AI_STATUS(userId), {
+        ai_paused: paused
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

@@ -24,6 +24,7 @@ class User(Base):
     # User status and preferences
     is_active = Column(Boolean, default=True)
     is_blocked = Column(Boolean, default=False)
+    ai_paused = Column(Boolean, default=False)
     language = Column(String(10), default="es")
     timezone = Column(String(50), default="America/Mexico_City")
     

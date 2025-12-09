@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
     HISTORY: `${API_BASE_URL}/chat/history`,
     ACTIVE_SESSIONS: `${API_BASE_URL}/chat/active-sessions`,
     SEND_MESSAGE: `${API_BASE_URL}/chat/message`,
+    USER_AI_STATUS: (userId: number) => `${API_BASE_URL}/chat/user/${userId}/ai-status`,
   },
 };
 
