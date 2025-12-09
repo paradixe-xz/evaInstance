@@ -156,6 +156,96 @@ class WhatsAppService:
             error_msg = f"Failed to send template message to {to}: {str(e)}"
             logger.error(error_msg)
             raise WhatsAppAPIError(error_msg, error_code="SEND_TEMPLATE_FAILED")
+
+    def send_image_message(self, to: str, image_url: str, caption: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Send an image message
+        
+        Args:
+            to: Recipient phone number
+            image_url: URL of the image
+            caption: Optional caption
+            
+        Returns:
+            API response
+        """
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "image",
+            "image": {
+                "link": image_url
+            }
+        }
+        
+        if caption:
+            payload["image"]["caption"] = caption
+            
+        try:
+            logger.info(f"Sending image message to {to}")
+            response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            logger.info(f"Image message sent successfully: {result}")
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to send image message to {to}: {str(e)}"
+            logger.error(error_msg)
+            raise WhatsAppAPIError(error_msg, error_code="SEND_IMAGE_FAILED")
+
+    def send_document_message(
+        self, 
+        to: str, 
+        document_url: str, 
+        caption: Optional[str] = None, 
+        filename: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a document message
+        
+        Args:
+            to: Recipient phone number
+            document_url: URL of the document
+            caption: Optional caption
+            filename: Optional filename
+            
+        Returns:
+            API response
+        """
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "document",
+            "document": {
+                "link": document_url
+            }
+        }
+        
+        if caption:
+            payload["document"]["caption"] = caption
+        if filename:
+            payload["document"]["filename"] = filename
+            
+        try:
+            logger.info(f"Sending document message to {to}")
+            response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            logger.info(f"Document message sent successfully: {result}")
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to send document message to {to}: {str(e)}"
+            logger.error(error_msg)
+            raise WhatsAppAPIError(error_msg, error_code="SEND_DOCUMENT_FAILED")
+
     
     def mark_message_as_read(self, message_id: str) -> Dict[str, Any]:
         """

@@ -4,6 +4,9 @@ Chat service for managing conversations and message processing
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+import os
+import re
+from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db, get_db_context
@@ -139,6 +142,26 @@ class ChatService:
             logger.error(f"Error saving message: {str(e)}")
             raise
     
+    def _extract_text_from_pdf(self, file_path: str) -> Optional[str]:
+        """
+        Extract text from PDF file
+        
+        Args:
+            file_path: Path to PDF file
+            
+        Returns:
+            Extracted text or None
+        """
+        try:
+            reader = PdfReader(file_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+            return text.strip()
+        except Exception as e:
+            logger.error(f"Error extracting text from PDF: {str(e)}")
+            return None
+
     def process_incoming_message(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process incoming WhatsApp message
@@ -159,171 +182,91 @@ class ChatService:
                     self._handle_status_update(parsed_message)
                 return {"status": "ignored", "reason": "Not a message or status update"}
                 
-            # Get user ID and message
+            # Get user ID and message details
             user_id = parsed_message.get("from")
-            user_message = parsed_message.get("text", "").strip()
-            
-            if not user_id or not user_message:
-                return {"status": "error", "reason": "Missing user ID or message"}
-                
-            # Determine next step based on user input
-            next_step = self.conversation_service.get_next_step(user_id, user_message)
-            
-            # If we have a predefined message, send it and save it to database
-            if next_step.get("message"):
-                # Get or create chat session to save the message
-                chat_session = self._get_or_create_chat_session(user_id)
-                
-                # Save the outgoing message to database
-                self._save_message(
-                    chat_session_id=chat_session.id,
-                    content=next_step["message"],
-                    direction=MessageDirection.OUTGOING,
-                    message_type="text",
-                    user_id=chat_session.user_id
-                )
-                
-                # Send message via WhatsApp
-                self.whatsapp_service.send_message(
-                    to=user_id,
-                    message=next_step["message"]
-                )
-                return {"status": "success", "next_step": next_step.get("next_step")}
-                
-            # Refresh conversation state after potential transitions
-            conversation_state = self.conversation_service.get_conversation_state(user_id)
-            logger.info(f"Conversation state for {user_id}: {conversation_state.get('current_step')}")
-            
-            # Check if AI is paused for this user
-            with get_db_context() as db:
-                user_repo = UserRepository(db)
-                # user_id from webhook is the phone number/whatsapp_id
-                user = user_repo.get_by_whatsapp_id(user_id)
-                
-                if user and user.ai_paused:
-                    logger.info(f"AI is paused for user {user.phone_number}, skipping AI generation but saving message")
-                    
-                    # Save message even if AI is paused
-                    chat_session = self._get_or_create_chat_session(user_id)
-                    self._save_message(
-                        chat_session_id=chat_session.id,
-                        content=user_message,
-                        direction=MessageDirection.INCOMING,
-                        message_type="text",
-                        whatsapp_message_id=parsed_message.get("message_id"),
-                        user_id=chat_session.user_id
-                    )
-                    
-                    return {
-                        "status": "ignored",
-                        "user_id": user.id,
-                        "reason": "AI paused for user"
-                    }
-
-            # If we're in AI conversation mode, generate a response using Ollama
-            if conversation_state.get("current_step") == "ai_conversation":
-                logger.info(f"Generating AI response for {user_id} with message: {user_message[:100]}")
-                # Get conversation history from database
-                chat_session = self._get_or_create_chat_session(user_id)
-                history = self._get_conversation_history(chat_session.id)
-                
-                # Filter out any messages that mention seguros/insurance to avoid contamination
-                # Also, if this is a new conversation (just started), don't use old history
-                if history:
-                    # Check if conversation just started (less than 2 messages in history)
-                    if len(history) <= 2:
-                        # For new conversations, start fresh - don't use old contaminated history
-                        history = []
-                        logger.info("New conversation detected, starting with clean history")
-                    else:
-                        # Filter out contaminated messages
-                        history = [
-                            msg for msg in history 
-                            if not any(word in msg.get("content", "").lower() 
-                                     for word in ["seguro", "insurance", "vive tranqui", "venzamos", "peludito", "seguros mundial"])
-                        ]
-                        logger.info(f"Filtered history, remaining messages: {len(history)}")
-                
-                # Save incoming message to database first
-                self._save_message(
-                    chat_session_id=chat_session.id,
-                    content=user_message,
-                    direction=MessageDirection.INCOMING,
-                    message_type="text",
-                    whatsapp_message_id=parsed_message.get("message_id"),
-                    user_id=chat_session.user_id
-                )
-                
-                # Generate AI response
-                logger.info(f"Calling Ollama service with history length: {len(history) if history else 0}")
-                response = self.ollama_service.generate_response(
-                    user_message=user_message,
-                    conversation_history=history,
-                    user_context={
-                        "phone": user_id,
-                        "name": parsed_message.get("profile_name", "Usuario")
-                    },
-                    conversation_state=conversation_state
-                )
-                
-                if not response:
-                    logger.error(f"Empty response from Ollama for {user_id}")
-                    response = "Lo siento, no pude generar una respuesta. ¿Podrías repetir tu mensaje?"
-                
-                logger.info(f"Generated response for {user_id}: {response[:100]}")
-                
-                # Save outgoing message to database
-                self._save_message(
-                    chat_session_id=chat_session.id,
-                    content=response,
-                    direction=MessageDirection.OUTGOING,
-                    message_type="text",
-                    user_id=chat_session.user_id
-                )
-                
-                # Send response via WhatsApp
-                self.whatsapp_service.send_message(
-                    to=user_id,
-                    message=response
-                )
-                
-                logger.info(f"Response sent to {user_id} successfully")
-                return {"status": "success", "response": response}
-                
-            return {"status": "success", "next_step": next_step.get("next_step")}
-            
-            # Extract message details
-            phone_number = parsed_message["from"]
-            message_content = parsed_message.get("text", "")
             message_type = parsed_message.get("type", "text")
-            whatsapp_message_id = parsed_message["message_id"]
+            user_message = parsed_message.get("text", "").strip()
             contact_name = parsed_message.get("contact", {}).get("name", "")
+            whatsapp_message_id = parsed_message.get("message_id")
             
-            logger.info(f"Processing message from {phone_number}: {message_content[:100]}")
+            if not user_id:
+                return {"status": "error", "reason": "Missing user ID"}
+
+            # --- Media Handling (Incoming) ---
+            additional_context = ""
             
-            # Get database session
+            if message_type == "document":
+                document = parsed_message.get("document", {})
+                mime_type = document.get("mime_type", "")
+                
+                if "application/pdf" in mime_type:
+                    media_id = document.get("id")
+                    filename = document.get("filename", "document.pdf")
+                    caption = document.get("caption", "")
+                    
+                    if caption:
+                        user_message = f"{caption} (PDF attached)"
+                    else:
+                        user_message = f"[PDF: {filename}]"
+                    
+                    # Download and extract text
+                    media_url = self.whatsapp_service.get_media_url(media_id)
+                    if media_url:
+                        temp_dir = "temp_media"
+                        if not os.path.exists(temp_dir):
+                            os.makedirs(temp_dir)
+                            
+                        file_path = f"{temp_dir}/{media_id}_{filename}"
+                        if self.whatsapp_service.download_media(media_url, file_path):
+                            extracted_text = self._extract_text_from_pdf(file_path)
+                            if extracted_text:
+                                # Truncate if too long (e.g., 2000 chars)
+                                additional_context = f"\n[SYSTEM: The user sent a PDF document named '{filename}'. Extracted Content: {extracted_text[:2000]}...]"
+                                logger.info(f"Extracted text from PDF {filename}")
+                            
+                            # Clean up
+                            try:
+                                os.remove(file_path)
+                            except:
+                                pass
+            
+            elif message_type == "image":
+                image = parsed_message.get("image", {})
+                caption = image.get("caption", "")
+                if caption:
+                    user_message = f"{caption} (Image attached)"
+                else:
+                    user_message = "[Image received]"
+                
+                additional_context = "\n[SYSTEM: The user sent an image. Treat it as if you received a photo.]"
+                
+            # Determine next step based on user input (flow vs AI)
+            # Only use flow logic for explicit text commands or if we are not in media mode
+            # For now, let's assume media always goes to AI/Agent unless flow strictly intercepts
+            
+            # Combine message for AI
+            full_user_message = user_message
+            if additional_context:
+                full_user_message += additional_context
+            
             # Get database session
             with get_db_context() as db:
                 user_repo = UserRepository(db)
                 chat_repo = ChatRepository(db)
                 message_repo = MessageRepository(db)
-                agent_repo = AgentRepository(db)
                 
                 # Get or create user
-                user = user_repo.get_by_phone_number(phone_number)
+                user = user_repo.get_by_phone_number(user_id)
                 if not user:
-                    # Use wa_id if available, otherwise use phone_number as whatsapp_id
-                    whatsapp_id = parsed_message.get("contact", {}).get("wa_id") or phone_number
+                    whatsapp_id = parsed_message.get("contact", {}).get("wa_id") or user_id
                     user = user_repo.create({
-                        "phone_number": phone_number,
+                        "phone_number": user_id,
                         "whatsapp_id": whatsapp_id,
-                        "name": contact_name or f"User {phone_number[-4:]}",
+                        "name": contact_name or f"User {user_id[-4:]}",
                         "is_active": True,
                         "language": "es"
                     })
-                    logger.info(f"Created new user: {user.phone_number} with whatsapp_id: {whatsapp_id}")
                 else:
-                    # Update user activity
                     user_repo.update_last_activity(user.id)
                     if contact_name and not user.name:
                         user_repo.update(user.id, {"name": contact_name})
@@ -331,119 +274,137 @@ class ChatService:
                 # Get or create active chat session
                 active_session = chat_repo.get_active_session_for_user(user.id)
                 if not active_session:
-                    # Generate unique session ID
                     session_id = f"session_{user.id}_{int(datetime.utcnow().timestamp())}"
                     active_session = chat_repo.create_session(
                         user_id=user.id,
                         session_id=session_id,
                         ai_personality="isa"
                     )
-                    logger.info(f"Created new chat session: {active_session.id}")
                 
-                # Check if message already exists (prevent duplicates)
+                # Check duplication
                 existing_message = message_repo.get_by_whatsapp_id(whatsapp_message_id)
                 if existing_message:
-                    logger.info(f"📝 Message {whatsapp_message_id} already exists, skipping processing")
-                    return {
-                        "status": "duplicate",
-                        "user_id": user.id,
-                        "session_id": active_session.id,
-                        "existing_message_id": existing_message.id,
-                        "note": "Message already processed"
-                    }
+                    return {"status": "duplicate", "note": "Message already processed"}
                 
                 # Save incoming message
+                # Map incoming media type to MessageType enum if possible, or fallback to TEXT/IMAGE
+                # Since we updated models, we trust simple strings or Enum
+                db_message_type = message_type if message_type in ["text", "image", "document", "template"] else "text"
+                
                 incoming_message = message_repo.create_message(
                     user_id=user.id,
                     chat_session_id=active_session.id,
-                    content=message_content,
+                    content=user_message, # Display friendly text
                     direction=MessageDirection.INCOMING,
-                    message_type=message_type,
+                    message_type=db_message_type,
                     whatsapp_message_id=whatsapp_message_id,
                     raw_content=str(parsed_message)
                 )
                 
-                # Mark WhatsApp message as read
+                # Mark as read
                 try:
                     self.whatsapp_service.mark_message_as_read(whatsapp_message_id)
-                except Exception as e:
-                    logger.warning(f"Failed to mark message as read: {str(e)}")
+                except Exception:
+                    pass
                 
-                # Generate AI response only for text messages
-                if message_type == "text" and message_content.strip():
-                    # Get next message from conversation flow
-                    flow_response = self.conversation_service.get_next_message(
-                        user_id=str(user.id),
-                        user_input=message_content
-                    )
-                    
-                    # If flow has a message, use it; otherwise generate with AI
-                    if flow_response.get("message"):
-                        ai_response = flow_response["message"]
-                    else:
-                        ai_response = self._generate_ai_response(
-                            user, active_session, message_content, db
-                        )
-                    
-                    if ai_response:
-                        # Send AI response via WhatsApp
-                        whatsapp_response = self.whatsapp_service.send_text_message(
-                            phone_number, ai_response
-                        )
-                        
-                        # Save outgoing message
-                        outgoing_message = message_repo.create_message(
-                            user_id=user.id,
-                            chat_session_id=active_session.id,
-                            content=ai_response,
-                            direction=MessageDirection.OUTGOING,
-                            message_type="text",
-                            whatsapp_message_id=whatsapp_response.get("messages", [{}])[0].get("id"),
-                            raw_content=str(whatsapp_response)
-                        )
-                        
-                        # Update message processing info
-                        processing_time = (datetime.utcnow() - incoming_message.timestamp).total_seconds()
-                        message_repo.update_ai_processing(
-                            incoming_message.id,
-                            response_time=int(processing_time * 1000),  # Convert to milliseconds
-                            confidence=95  # Default confidence
-                        )
-                        
-                        logger.info(f"AI response sent to {phone_number}")
-                        
-                        return {
-                            "status": "processed",
-                            "user_id": user.id,
-                            "session_id": active_session.id,
-                            "incoming_message_id": incoming_message.id,
-                            "outgoing_message_id": outgoing_message.id,
-                            "ai_response": ai_response
-                        }
-                    else:
-                        logger.warning(f"Failed to generate AI response for message from {phone_number}")
-                        return {
-                            "status": "processed",
-                            "user_id": user.id,
-                            "session_id": active_session.id,
-                            "incoming_message_id": incoming_message.id,
-                            "error": "Failed to generate AI response"
-                        }
+                # Check AI Paused
+                if user.ai_paused:
+                    return {"status": "ignored", "reason": "AI paused"}
+                
+                # Generate AI Response
+                # We use full_user_message (with Context) for AI
+                
+                # Get conversation history
+                history = self._get_conversation_history(active_session.id)
+                # ... history filtering logic ...
+                if history and len(history) <= 2:
+                    history = []
                 else:
-                    # Non-text message or empty content
-                    logger.info(f"Received non-text message or empty content from {phone_number}")
-                    return {
-                        "status": "processed",
-                        "user_id": user.id,
-                        "session_id": active_session.id,
-                        "incoming_message_id": incoming_message.id,
-                        "note": "Non-text message received"
-                    }
+                     history = [m for m in history if not any(w in m.get("content","").lower() for w in ["seguro", "insurance", "vive tranqui"])]
+                
+                # Call Ollama
+                response = self.ollama_service.generate_response(
+                    user_message=full_user_message,
+                    conversation_history=history,
+                    user_context={
+                        "phone": user_id,
+                        "name": user.name
+                    },
+                    conversation_state={"current_step": "ai_conversation"} 
+                )
+                
+                if not response:
+                    return {"status": "error", "error": "Empty AI response"}
+                
+                # --- Media Handling (Outgoing / Hands) ---
+                # Check for [SEND_DOC: url] or [SEND_IMG: url] commands
+                # Regex patterns
+                doc_pattern = r'\[SEND_DOC:\s*(.+?)\]'
+                img_pattern = r'\[SEND_IMG:\s*(.+?)\]'
+                
+                media_sends = []
+                
+                # Find documents
+                for match in re.finditer(doc_pattern, response):
+                    url = match.group(1).strip()
+                    media_sends.append({"type": "document", "url": url})
+                
+                # Find images
+                for match in re.finditer(img_pattern, response):
+                    url = match.group(1).strip()
+                    media_sends.append({"type": "image", "url": url})
+                
+                # Remove tags from response text
+                clean_response = re.sub(doc_pattern, '', response)
+                clean_response = re.sub(img_pattern, '', clean_response).strip()
+                
+                # Send Text Response (if any remains)
+                if clean_response:
+                    self.whatsapp_service.send_text_message(user_id, clean_response)
                     
+                    # Save text message
+                    self._save_message(
+                        chat_session_id=active_session.id,
+                        content=clean_response,
+                        direction=MessageDirection.OUTGOING,
+                        message_type="text",
+                        user_id=user.id
+                    )
+                
+                # Send Media Files
+                for media in media_sends:
+                    if media["type"] == "document":
+                        # Attempt to derive filename from url or default
+                        filename = media["url"].split("/")[-1] or "document.pdf"
+                        self.whatsapp_service.send_document_message(user_id, media["url"], filename=filename)
+                        
+                        self._save_message(
+                            chat_session_id=active_session.id,
+                            content=f"[Sent Document: {filename}]",
+                            direction=MessageDirection.OUTGOING,
+                            message_type="document",
+                            user_id=user.id
+                        )
+                        
+                    elif media["type"] == "image":
+                        self.whatsapp_service.send_image_message(user_id, media["url"])
+                        
+                        self._save_message(
+                            chat_session_id=active_session.id,
+                            content=f"[Sent Image]",
+                            direction=MessageDirection.OUTGOING,
+                            message_type="image",
+                            user_id=user.id
+                        )
+                
+                return {"status": "success", "response": clean_response}
+
         except Exception as e:
             error_msg = f"Error processing incoming message: {str(e)}"
             logger.error(error_msg)
             raise ChatHistoryError(error_msg, error_code="PROCESS_MESSAGE_FAILED")
+                    
+
     
     def _generate_ai_response(
         self,

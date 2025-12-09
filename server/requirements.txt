@@ -43,3 +43,4 @@ psutil
 # TTS Engines
 # TTS (Coqui) - No compatible con Python 3.12+, comentado
 # Usar edge-tts en su lugar (ya incluido arriba)
+pypdf==3.17.1
