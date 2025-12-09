@@ -27,6 +27,7 @@ class UserInfo(BaseModel):
     phone_number: str
     name: str
     is_active: bool
+    ai_paused: bool = False
     total_messages: int
     last_activity: Optional[str] = None
 
@@ -38,6 +39,7 @@ class MessageInfo(BaseModel):
     content: str
     message_type: str
     created_at: str
+    timestamp: Optional[str] = None
     sent_at: Optional[str] = None
     received_at: Optional[str] = None
     is_read: bool
