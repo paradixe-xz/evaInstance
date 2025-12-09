@@ -66,7 +66,7 @@ def create_admin_user():
     try:
         print("\n⏳ Creando usuario...")
         response = requests.post(
-            f"{API_URL}/auth/register",
+            f"{API_URL}/auth/signup",
             json=user_data,
             timeout=10
         )
