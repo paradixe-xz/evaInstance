@@ -9,6 +9,14 @@ import os
 import base64
 from pathlib import Path
 
+# Import pdf2image for PDF conversion
+try:
+    from pdf2image import convert_from_path
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
+    convert_from_path = None
+
 # Import ollama library
 try:
     import ollama
@@ -553,13 +561,52 @@ class OllamaService:
             if not OLLAMA_AVAILABLE:
                 raise ServiceUnavailableError("Ollama library not available")
             
-            logger.info(f"Generating vision response for image: {image_path}")
+            logger.info(f"Generating vision response for file: {image_path}")
             
-            # Read and encode image to base64
-            with open(image_path, "rb") as image_file:
-                image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            # Check if file is PDF
+            is_pdf = image_path.lower().endswith('.pdf')
+            images_base64 = []
             
-            # Build messages with image
+            if is_pdf:
+                # Convert PDF to images
+                if not PDF2IMAGE_AVAILABLE:
+                    logger.warning("pdf2image not available, falling back to text extraction")
+                    raise OllamaError("PDF to image conversion not available. Install pdf2image: pip install pdf2image")
+                
+                logger.info(f"Converting PDF to images: {image_path}")
+                try:
+                    # Convert PDF pages to images
+                    images = convert_from_path(image_path, dpi=200)
+                    logger.info(f"Converted PDF to {len(images)} images")
+                    
+                    # Convert each page to base64
+                    import io
+                    for i, img in enumerate(images):
+                        # Convert PIL Image to bytes
+                        img_byte_arr = io.BytesIO()
+                        img.save(img_byte_arr, format='PNG')
+                        img_byte_arr = img_byte_arr.getvalue()
+                        
+                        # Encode to base64
+                        img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+                        images_base64.append(img_base64)
+                        
+                        # Limit to first 5 pages to avoid token limits
+                        if i >= 4:
+                            logger.info(f"Limiting to first 5 pages of PDF")
+                            break
+                    
+                except Exception as e:
+                    error_msg = f"Error converting PDF to images: {str(e)}"
+                    logger.error(error_msg)
+                    raise OllamaError(error_msg)
+            else:
+                # Read and encode single image to base64
+                with open(image_path, "rb") as image_file:
+                    image_data = base64.b64encode(image_file.read()).decode('utf-8')
+                    images_base64.append(image_data)
+            
+            # Build messages with images
             messages = []
             
             # Add conversation history if available (text only)
@@ -573,14 +620,14 @@ class OllamaService:
                             "content": content
                         })
             
-            # Add current message with image
+            # Add current message with images
             messages.append({
                 "role": "user",
                 "content": user_message,
-                "images": [image_data]
+                "images": images_base64
             })
             
-            logger.info(f"Calling vision model: {self.model}")
+            logger.info(f"Calling vision model: {self.model} with {len(images_base64)} image(s)")
             
             # Call Ollama with vision support
             response = ollama.chat(
@@ -602,7 +649,7 @@ class OllamaService:
                 raise OllamaError(error_msg)
                 
         except FileNotFoundError:
-            error_msg = f"Image file not found: {image_path}"
+            error_msg = f"File not found: {image_path}"
             logger.error(error_msg)
             raise OllamaError(error_msg)
         except Exception as e:
