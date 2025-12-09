@@ -195,15 +195,18 @@ class ChatService:
             logger.info(f"Conversation state for {user_id}: {conversation_state.get('current_step')}")
             
             # Check if AI is paused for this user
-            if user.ai_paused:
-                logger.info(f"AI is paused for user {user.phone_number}, skipping AI generation")
-                return {
-                    "status": "processed",
-                    "user_id": user.id,
-                    "session_id": active_session.id,
-                    "incoming_message_id": incoming_message.id,
-                    "note": "AI paused for user"
-                }
+            with get_db_context() as db:
+                user_repo = UserRepository(db)
+                # user_id from webhook is the phone number/whatsapp_id
+                user = user_repo.get_by_whatsapp_id(user_id)
+                
+                if user and user.ai_paused:
+                    logger.info(f"AI is paused for user {user.phone_number}, skipping AI generation")
+                    return {
+                        "status": "ignored",
+                        "user_id": user.id,
+                        "reason": "AI paused for user"
+                    }
 
             # If we're in AI conversation mode, generate a response using Ollama
             if conversation_state.get("current_step") == "ai_conversation":
