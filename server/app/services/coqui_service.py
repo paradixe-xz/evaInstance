@@ -4,7 +4,6 @@ Service for integration with Coqui TTS (Local).
 import logging
 import os
 import uuid
-import torch
 from typing import Optional
 from fastapi import HTTPException
 
@@ -15,16 +14,23 @@ logger = logging.getLogger(__name__)
 class CoquiTTSService:
     def __init__(self):
         self.settings = get_settings()
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_name = "tts_models/multilingual/multi-dataset/xtts_v2" # High quality, slow on CPU
-        # self.model_name = "tts_models/es/css10/vits" # Faster, lower quality
-        self.tts = None
         self.enabled = True
+        self.tts = None
+        self.device = "cpu"
+        self.model_name = "tts_models/multilingual/multi-dataset/xtts_v2"
         
+        try:
+            import torch
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            logger.warning("torch not found. Coqui TTS will be disabled.")
+            self.enabled = False
+            
         self.audio_dir = "storage/media/tts"
         os.makedirs(self.audio_dir, exist_ok=True)
         
-        self._initialize_model()
+        if self.enabled:
+            self._initialize_model()
 
     def _initialize_model(self):
         """Initialize the Coqui TTS model."""

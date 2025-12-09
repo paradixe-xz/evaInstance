@@ -16,6 +16,12 @@ export const API_ENDPOINTS = {
       CHAT: (id: number) => `${API_BASE_URL}/agents/ollama/${id}/chat`,
     },
   },
+  CHAT: {
+    USERS: `${API_BASE_URL}/chat/users`,
+    HISTORY: `${API_BASE_URL}/chat/history`,
+    ACTIVE_SESSIONS: `${API_BASE_URL}/chat/active-sessions`,
+    SEND_MESSAGE: `${API_BASE_URL}/chat/message`,
+  },
 };
 
 export const DEFAULT_HEADERS = {
