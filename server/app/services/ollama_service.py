@@ -6,6 +6,8 @@ import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import os
+import base64
+from pathlib import Path
 
 # Import ollama library
 try:
@@ -46,7 +48,8 @@ class OllamaService:
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         user_context: Optional[Dict[str, Any]] = None,
-        conversation_state: Optional[Dict[str, Any]] = None
+        conversation_state: Optional[Dict[str, Any]] = None,
+        image_path: Optional[str] = None
     ) -> str:
         """
         Generate AI response using Ollama
@@ -56,10 +59,15 @@ class OllamaService:
             conversation_history: Previous conversation messages
             user_context: Additional user context (name, preferences, etc.)
             conversation_state: Current conversation state
+            image_path: Optional path to image/PDF file for vision models
             
         Returns:
             AI generated response
         """
+        
+        # If image is provided, use vision model
+        if image_path:
+            return self.generate_vision_response(user_message, image_path, conversation_history, user_context)
         
         # If we're in AI conversation mode, generate a natural response
         if conversation_state and conversation_state.get("current_step") == "ai_conversation":
@@ -512,21 +520,95 @@ class OllamaService:
                     if result.returncode == 0 and result.stdout.strip():
                         summary = result.stdout.strip()
                         return summary[:max_length]
-                        
-                except Exception:
-                    continue
-            
             return ""
                 
         except Exception as e:
             logger.error(f"Error generating summary: {str(e)}")
             return ""
     
+    def generate_vision_response(
+        self,
+        user_message: str,
+        image_path: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        user_context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Generate AI response for images/PDFs using vision models
+        
+        Args:
+            user_message: User's message/question about the image
+            image_path: Path to the image or PDF file
+            conversation_history: Previous conversation messages
+            user_context: Additional user context
+            
+        Returns:
+            AI generated response about the image
+        """
+        try:
+            if not OLLAMA_AVAILABLE:
+                raise ServiceUnavailableError("Ollama library not available")
+            
+            logger.info(f"Generating vision response for image: {image_path}")
+            
+            # Read and encode image to base64
+            with open(image_path, "rb") as image_file:
+                image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            # Build messages with image
+            messages = []
+            
+            # Add conversation history if available (text only)
+            if conversation_history:
+                for msg in conversation_history[-5:]:  # Last 5 messages for context
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    if content and role in ["user", "assistant"]:
+                        messages.append({
+                            "role": role,
+                            "content": content
+                        })
+            
+            # Add current message with image
+            messages.append({
+                "role": "user",
+                "content": user_message,
+                "images": [image_data]
+            })
+            
+            logger.info(f"Calling vision model: {self.model}")
+            
+            # Call Ollama with vision support
+            response = ollama.chat(
+                model=self.model,
+                messages=messages,
+                options={
+                    "temperature": self.temperature,
+                    "num_predict": self.max_tokens
+                }
+            )
+            
+            if response and "message" in response:
+                ai_response = response["message"]["content"]
+                logger.info(f"✅ Got vision response: {ai_response[:100]}...")
+                return ai_response
+            else:
+                error_msg = f"Unexpected response format from vision model: {response}"
+                logger.error(error_msg)
+                raise OllamaError(error_msg)
+                
+        except FileNotFoundError:
+            error_msg = f"Image file not found: {image_path}"
+            logger.error(error_msg)
+            raise OllamaError(error_msg)
+        except Exception as e:
+            error_msg = f"Error calling vision model: {str(e)}"
+            logger.error(error_msg)
+            raise OllamaError(error_msg)
+    
     def list_models(self) -> List[Dict[str, Any]]:
         """
         Get list of available Ollama models
-        
-        Returns:
             List of available models with their details
         """
         try:

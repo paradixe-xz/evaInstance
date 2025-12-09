@@ -74,6 +74,11 @@ async def get_chat_history(
             offset=offset
         )
         
+        # DEBUG: Log media fields for first message
+        if result.get("messages") and len(result["messages"]) > 0:
+            first_msg = result["messages"][0]
+            logger.info(f"🔍 DEBUG First message media fields: media_local_path={first_msg.get('media_local_path')}, media_filename={first_msg.get('media_filename')}, message_type={first_msg.get('message_type')}")
+        
         return ChatHistoryResponse(**result)
         
     except ValidationError as e:

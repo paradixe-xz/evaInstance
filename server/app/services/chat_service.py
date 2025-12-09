@@ -205,11 +205,6 @@ class ChatService:
                     filename = document.get("filename", "document.pdf")
                     caption = document.get("caption", "")
                     
-                    if caption:
-                        user_message = f"{caption} (PDF attached)"
-                    else:
-                        user_message = f"[PDF: {filename}]"
-                    
                     # Download and extract text
                     media_url = self.whatsapp_service.get_media_url(media_id)
                     if media_url:
@@ -232,6 +227,23 @@ class ChatService:
                                 # Truncate if too long (e.g., 2000 chars)
                                 additional_context = f"\n[SYSTEM: The user sent a PDF document named '{filename}'. Extracted Content: {extracted_text[:2000]}...]"
                                 logger.info(f"Extracted text from PDF {filename}")
+                            
+                            # Add download link to message content
+                            media_link = f"📄 Descargar PDF: /api/v1/media/{media_id}_{filename}"
+                            if caption:
+                                user_message = f"{caption}\n{media_link}"
+                            else:
+                                user_message = f"[PDF: {filename}]\n{media_link}"
+                        else:
+                            if caption:
+                                user_message = f"{caption} (PDF - download failed)"
+                            else:
+                                user_message = f"[PDF: {filename} - download failed]"
+                    else:
+                        if caption:
+                            user_message = f"{caption} (PDF attached)"
+                        else:
+                            user_message = f"[PDF: {filename}]"
             
             elif message_type == "image":
                 image = parsed_message.get("image", {})
@@ -240,11 +252,6 @@ class ChatService:
                 mime_type = image.get("mime_type", "image/jpeg")
                 
                 logger.info(f"Processing image message with ID: {media_id}")
-                
-                if caption:
-                    user_message = f"{caption} (Image attached)"
-                else:
-                    user_message = "[Image received]"
                 
                 # Download image
                 media_url = self.whatsapp_service.get_media_url(media_id)
@@ -267,9 +274,25 @@ class ChatService:
                         logger.info(f"Image downloaded to {file_path}")
                         # In the future, pass file_path to Vision model
                         additional_context = "\n[SYSTEM: The user sent an image. Treat it as if you received a photo.]"
+                        
+                        # Add link to message content
+                        media_link = f"📷 Ver imagen: /api/v1/media/{media_id}.jpg"
+                        if caption:
+                            user_message = f"{caption}\n{media_link}"
+                        else:
+                            user_message = f"[Imagen recibida]\n{media_link}"
                     else:
                         logger.warning(f"Failed to download image {media_id}")
                         additional_context = "\n[SYSTEM: The user sent an image, but download failed.]"
+                        if caption:
+                            user_message = f"{caption} (Image - download failed)"
+                        else:
+                            user_message = "[Image received - download failed]"
+                else:
+                    if caption:
+                        user_message = f"{caption} (Image attached)"
+                    else:
+                        user_message = "[Image received]"
                 
             logger.info(f"Message processed. Type: {message_type}, User: {user_id}, Content: {user_message[:50]}")
                 
@@ -367,6 +390,12 @@ class ChatService:
                      history = [m for m in history if not any(w in m.get("content","").lower() for w in ["seguro", "insurance", "vive tranqui"])]
                 
                 # Call Ollama
+                # Pass image path if available for vision models
+                image_path_for_vision = None
+                if media_metadata and media_metadata.get("local_path"):
+                    image_path_for_vision = media_metadata.get("local_path")
+                    logger.info(f"🖼️ Passing image to vision model: {image_path_for_vision}")
+                
                 response = self.ollama_service.generate_response(
                     user_message=full_user_message,
                     conversation_history=history,
@@ -374,7 +403,8 @@ class ChatService:
                         "phone": user_id,
                         "name": user.name
                     },
-                    conversation_state={"current_step": "ai_conversation"} 
+                    conversation_state={"current_step": "ai_conversation"},
+                    image_path=image_path_for_vision
                 )
                 
                 if not response:
