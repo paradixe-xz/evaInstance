@@ -62,6 +62,10 @@ class ChatRepository(BaseRepository[ChatSession]):
         except Exception as e:
             raise DatabaseError(f"Error getting active session for user {user_id}: {str(e)}")
     
+    def get_active_session(self, user_id: int) -> Optional[ChatSession]:
+        """Alias for get_active_session_for_user"""
+        return self.get_active_session_for_user(user_id)
+    
     def get_user_sessions(
         self,
         user_id: int,
