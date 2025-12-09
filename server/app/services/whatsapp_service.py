@@ -335,11 +335,9 @@ class WhatsAppService:
         # Remove all non-digit characters
         clean_number = "".join(filter(str.isdigit, phone_number))
         
-        # Add country code if missing (assuming Mexico +52)
-        if len(clean_number) == 10:
-            clean_number = "52" + clean_number
-        elif len(clean_number) == 12 and clean_number.startswith("52"):
-            pass  # Already has country code
+        # Generic validation for international numbers (10-15 digits)
+        if 10 <= len(clean_number) <= 15:
+            pass  # Accept as valid
         else:
             raise ValidationError(f"Invalid phone number format: {phone_number}")
         
