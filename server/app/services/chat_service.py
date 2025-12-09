@@ -27,6 +27,36 @@ logger = get_logger(__name__)
 class ChatService:
     """Service for managing chat conversations and message processing"""
     
+    def _get_user_media_folder(self, user_id: str, user_name: Optional[str] = None) -> str:
+        """
+        Get or create a folder for user's media files
+        
+        Args:
+            user_id: User's phone number
+            user_name: User's name (optional)
+            
+        Returns:
+            Path to user's media folder
+        """
+        # Create base media directory
+        base_dir = "user_documents"
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        
+        # Create user-specific folder
+        # Use name if available, otherwise use phone
+        folder_name = user_name if user_name else user_id
+        # Sanitize folder name (remove special characters)
+        folder_name = "".join(c for c in folder_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        folder_name = folder_name.replace(" ", "_")
+        
+        user_folder = os.path.join(base_dir, folder_name)
+        if not os.path.exists(user_folder):
+            os.makedirs(user_folder)
+            logger.info(f"📁 Created folder for user: {user_folder}")
+        
+        return user_folder
+    
     def __init__(self):
         self.whatsapp_service = WhatsAppService()
         self.ollama_service = OllamaService()
@@ -208,12 +238,17 @@ class ChatService:
                     # Download and extract text
                     media_url = self.whatsapp_service.get_media_url(media_id)
                     if media_url:
-                        temp_dir = "temp_media"
-                        if not os.path.exists(temp_dir):
-                            os.makedirs(temp_dir)
-                            
-                        file_path = f"{temp_dir}/{media_id}_{filename}"
+                        # Get user-specific folder
+                        user_folder = self._get_user_media_folder(user_id, user.name if user else None)
+                        
+                        # Save with timestamp for uniqueness
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        file_path = os.path.join(user_folder, f"{timestamp}_{filename}")
+                        
                         if self.whatsapp_service.download_media(media_url, file_path):
+                            logger.info(f"📄 PDF saved to: {file_path}")
+                            
                             # Store media metadata for database
                             media_metadata = {
                                 "url": document.get("url", media_url),
@@ -256,19 +291,23 @@ class ChatService:
                 # Download image
                 media_url = self.whatsapp_service.get_media_url(media_id)
                 if media_url:
-                    temp_dir = "temp_media"
-                    if not os.path.exists(temp_dir):
-                        os.makedirs(temp_dir)
+                    # Get user-specific folder
+                    user_folder = self._get_user_media_folder(user_id, user.name if user else None)
                     
-                    # Extension inference (simplified)
-                    file_path = f"{temp_dir}/{media_id}.jpg"
+                    # Save with timestamp for uniqueness
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    file_path = os.path.join(user_folder, f"{timestamp}_image.jpg")
+                    
                     if self.whatsapp_service.download_media(media_url, file_path):
+                        logger.info(f"📷 Image saved to: {file_path}")
+                        
                         # Store media metadata for database
                         media_metadata = {
                             "url": image.get("url", media_url),
                             "mime_type": mime_type,
                             "local_path": file_path,
-                            "filename": f"{media_id}.jpg"
+                            "filename": f"{timestamp}_image.jpg"
                         }
                         
                         logger.info(f"Image downloaded to {file_path}")
