@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AgentesPage } from './pages/AgentesPage';
 import { CreateAgentPage } from './pages/agent/CreateAgentPage';
@@ -62,14 +61,6 @@ function AppRoutes() {
         element={
           <PublicRoute>
             <LoginPage />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <PublicRoute>
-            <RegisterPage />
           </PublicRoute>
         }
       />
