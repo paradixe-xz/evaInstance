@@ -209,6 +209,15 @@ class MessageRepository(BaseRepository[Message]):
             ).order_by(desc(Message.timestamp)).offset(offset).limit(limit).all()
         except Exception as e:
             raise DatabaseError(f"Error getting messages for user {user_id}: {str(e)}")
+
+    def count_user_messages(self, user_id: int) -> int:
+        """Count total messages for a user"""
+        try:
+            return self.db.query(Message).filter(
+                Message.user_id == user_id
+            ).count()
+        except Exception as e:
+            raise DatabaseError(f"Error counting messages for user {user_id}: {str(e)}")
     
     def mark_as_read(self, message_id: int) -> Optional[Message]:
         """Mark message as read"""
