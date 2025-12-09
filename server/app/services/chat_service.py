@@ -581,16 +581,17 @@ class ChatService:
                 
                 # Save outgoing message
                 outgoing_message = message_repo.create({
-                    "session_id": active_session.id,
+                    "chat_session_id": active_session.id,
                     "whatsapp_message_id": whatsapp_response.get("messages", [{}])[0].get("id"),
                     "direction": MessageDirection.OUTGOING,
                     "message_type": MessageType.TEXT,
                     "content": message,
-                    "metadata": {
+                    "raw_content": str({
                         "whatsapp_response": whatsapp_response,
                         "manual_send": True
-                    },
-                    "sent_at": datetime.utcnow()
+                    }),
+                    "timestamp": datetime.utcnow(),
+                    "user_id": user.id  # Required field
                 })
                 
                 return {
@@ -660,8 +661,8 @@ class ChatService:
                             "content": msg.content,
                             "message_type": msg.message_type.value,
                             "created_at": msg.created_at.isoformat(),
-                            "sent_at": msg.sent_at.isoformat() if msg.sent_at else None,
-                            "received_at": msg.received_at.isoformat() if msg.received_at else None,
+                            "sent_at": msg.timestamp.isoformat() if msg.timestamp else None,
+                            "received_at": msg.timestamp.isoformat() if msg.timestamp else None,
                             "is_read": msg.is_read,
                             "is_delivered": msg.is_delivered
                         }
