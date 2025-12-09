@@ -643,7 +643,10 @@ class ChatService:
                     user.id, limit=limit, offset=offset
                 )
                 
-                total_messages = message_repo.count_user_messages(user.id).reverse()
+                total_messages = message_repo.count_user_messages(user.id)
+                
+                # Reverse messages to return them in chronological order (oldest first)
+                messages = messages[::-1]
                 
                 return {
                     "user": {
