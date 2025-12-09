@@ -307,7 +307,7 @@ async def block_user(user_id: int, db: Session = Depends(get_db)):
         
         user_repo = UserRepository(db)
         
-        user = user_repo.get_by_id(user_id)
+        user = user_repo.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
@@ -330,7 +330,7 @@ async def unblock_user(user_id: int, db: Session = Depends(get_db)):
         
         user_repo = UserRepository(db)
         
-        user = user_repo.get_by_id(user_id)
+        user = user_repo.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
@@ -362,7 +362,7 @@ async def update_ai_status(
         
         user_repo = UserRepository(db)
         
-        user = user_repo.get_by_id(user_id)
+        user = user_repo.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
