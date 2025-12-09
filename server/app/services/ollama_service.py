@@ -123,22 +123,10 @@ class OllamaService:
         user_context: Optional[Dict[str, Any]]
     ) -> str:
         """Build the system prompt based on conversation state"""
-        # For the "isa" model, trust the modelfile and only add minimal context
-        # The modelfile already has the full system prompt defined
-        prompt = ""  # Empty prompt - let the modelfile handle it
-        
-        # Only add user context if available
-        if user_context:
-            context_parts = []
-            if "name" in user_context and user_context["name"]:
-                context_parts.append(f"Nombre del cliente: {user_context['name']}")
-            if "phone" in user_context and user_context["phone"]:
-                context_parts.append(f"Teléfono: {user_context['phone']}")
-            
-            if context_parts:
-                prompt = "\n".join(context_parts)
-                
-        return prompt if prompt else None  # Return None to use modelfile's system prompt
+        # CRITICAL: Always return None to let the modelfile handle the system prompt
+        # The modelfile (Ana, ISA, etc.) has the complete personality and instructions
+        # We inject user context (name, phone) directly in the user message instead
+        return None
         
     def _call_ollama_api(self, messages: List[Dict[str, str]]) -> str:
         """
@@ -316,22 +304,10 @@ class OllamaService:
         """
         messages = []
         
-        # For "ema" model, don't override the system prompt - let the modelfile handle it
-        # Only add system message if we have a custom one from user_context
-        system_message = None
-        if user_context and 'system_prompt' in user_context:
-            system_message = user_context['system_prompt']
-        elif self.model != "isa":  # Only use default system prompt for other models
-            system_message = self.system_prompt
+        # CRITICAL: Let the modelfile handle the system prompt completely
+        # Do NOT add any system messages - the modelfile (Ana, ISA, etc.) already has it
         
-        # Only add system message if we have one (for ema model, modelfile handles it)
-        if system_message:
-            messages.append({
-                "role": "system",
-                "content": system_message
-            })
-        
-        # Add conversation history
+        # Add conversation history (clean, no modifications)
         if conversation_history:
             for msg in conversation_history[-10:]:  # Last 10 messages for context
                 # Prefer explicit role if provided; fall back to direction metadata
@@ -352,10 +328,26 @@ class OllamaService:
                         "content": content
                     })
         
+        # Prepare current user message
+        # If we have user context (name, phone), inject it naturally in the FIRST message only
+        final_user_message = user_message
+        
+        if user_context and len(messages) == 0:  # Only on first message of conversation
+            context_parts = []
+            if "name" in user_context and user_context["name"]:
+                context_parts.append(f"[Cliente: {user_context['name']}]")
+            if "phone" in user_context and user_context["phone"]:
+                context_parts.append(f"[Tel: {user_context['phone']}]")
+            
+            # Add context prefix only if we have it
+            if context_parts:
+                context_str = " ".join(context_parts)
+                final_user_message = f"{context_str}\n{user_message}"
+        
         # Add current user message
         messages.append({
             "role": "user",
-            "content": user_message
+            "content": final_user_message
         })
         
         return messages
