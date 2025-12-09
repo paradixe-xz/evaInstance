@@ -199,14 +199,14 @@ class MessageRepository(BaseRepository[Message]):
     def get_user_messages(
         self,
         user_id: int,
-        skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0
     ) -> List[Message]:
         """Get all messages for a user"""
         try:
             return self.db.query(Message).filter(
                 Message.user_id == user_id
-            ).order_by(desc(Message.timestamp)).offset(skip).limit(limit).all()
+            ).order_by(desc(Message.timestamp)).offset(offset).limit(limit).all()
         except Exception as e:
             raise DatabaseError(f"Error getting messages for user {user_id}: {str(e)}")
     

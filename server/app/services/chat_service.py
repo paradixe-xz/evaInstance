@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from ..core.database import get_db
+from ..core.database import get_db, get_db_context
 from ..core.logging import get_logger
 from ..core.exceptions import ChatHistoryError, ValidationError
 from ..models.user import User
@@ -39,9 +39,7 @@ class ChatService:
         Returns:
             ChatSession object
         """
-        db_generator = get_db()
-        db = next(db_generator)
-        try:
+        with get_db_context() as db:
             chat_repo = ChatRepository(db)
             user_repo = UserRepository(db)
             
@@ -67,12 +65,6 @@ class ChatService:
                 )
             
             return active_session
-            
-        finally:
-            try:
-                next(db_generator)  # Close the database connection
-            except StopIteration:
-                pass
     
     def _get_conversation_history(self, chat_session_id: int, limit: int = 10) -> List[Dict[str, str]]:
         """
@@ -85,9 +77,7 @@ class ChatService:
         Returns:
             List of message dictionaries with role and content
         """
-        db_generator = get_db()
-        db = next(db_generator)
-        try:
+        with get_db_context() as db:
             message_repo = MessageRepository(db)
             messages = message_repo.get_messages_by_session(
                 chat_session_id=chat_session_id,
@@ -101,11 +91,6 @@ class ChatService:
                 }
                 for msg in messages
             ]
-        finally:
-            try:
-                next(db_generator)  # Close the database connection
-            except StopIteration:
-                pass
     
     def _save_message(
         self,
@@ -127,39 +112,32 @@ class ChatService:
             whatsapp_message_id: Optional WhatsApp message ID
             user_id: Optional user ID. If not provided, will try to get it from the chat session
         """
-        db_generator = get_db()
-        db = next(db_generator)
         try:
-            message_repo = MessageRepository(db)
-            chat_repo = ChatRepository(db)
-            
-            # If user_id is not provided, try to get it from the chat session
-            if user_id is None:
-                chat_session = chat_repo.get(chat_session_id)
-                if chat_session:
-                    user_id = chat_session.user_id
-            
-            if user_id is None:
-                raise ValueError("Could not determine user_id for message")
-            
-            message_repo.create_message(
-                user_id=user_id,
-                chat_session_id=chat_session_id,
-                content=content,
-                direction=direction,
-                message_type=message_type,
-                whatsapp_message_id=whatsapp_message_id
-            )
-            db.commit()
+            with get_db_context() as db:
+                message_repo = MessageRepository(db)
+                chat_repo = ChatRepository(db)
+                
+                # If user_id is not provided, try to get it from the chat session
+                if user_id is None:
+                    chat_session = chat_repo.get(chat_session_id)
+                    if chat_session:
+                        user_id = chat_session.user_id
+                
+                if user_id is None:
+                    raise ValueError("Could not determine user_id for message")
+                
+                message_repo.create_message(
+                    user_id=user_id,
+                    chat_session_id=chat_session_id,
+                    content=content,
+                    direction=direction,
+                    message_type=message_type,
+                    whatsapp_message_id=whatsapp_message_id
+                )
+                db.commit()
         except Exception as e:
-            db.rollback()
             logger.error(f"Error saving message: {str(e)}")
             raise
-        finally:
-            try:
-                next(db_generator)  # Close the database connection
-            except StopIteration:
-                pass
     
     def process_incoming_message(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -298,9 +276,8 @@ class ChatService:
             logger.info(f"Processing message from {phone_number}: {message_content[:100]}")
             
             # Get database session
-            db_generator = get_db()
-            db = next(db_generator)
-            try:
+            # Get database session
+            with get_db_context() as db:
                 user_repo = UserRepository(db)
                 chat_repo = ChatRepository(db)
                 message_repo = MessageRepository(db)
@@ -436,12 +413,6 @@ class ChatService:
                         "incoming_message_id": incoming_message.id,
                         "note": "Non-text message received"
                     }
-            finally:
-                # Close database session
-                try:
-                    next(db_generator, None)  # Exhaust the generator to trigger cleanup
-                except StopIteration:
-                    pass
                     
         except Exception as e:
             error_msg = f"Error processing incoming message: {str(e)}"
@@ -548,7 +519,7 @@ class ChatService:
             if not message_id or not status:
                 return
             
-            with get_db() as db:
+            with get_db_context() as db:
                 message_repo = MessageRepository(db)
                 
                 if status == "delivered":
@@ -583,7 +554,7 @@ class ChatService:
                 formatted_phone, message
             )
             
-            with get_db() as db:
+            with get_db_context() as db:
                 user_repo = UserRepository(db)
                 chat_repo = ChatRepository(db)
                 message_repo = MessageRepository(db)
@@ -655,7 +626,7 @@ class ChatService:
         try:
             formatted_phone = self.whatsapp_service.validate_phone_number(phone_number)
             
-            with get_db() as db:
+            with get_db_context() as db:
                 user_repo = UserRepository(db)
                 message_repo = MessageRepository(db)
                 
@@ -717,7 +688,7 @@ class ChatService:
             List of active sessions
         """
         try:
-            with get_db() as db:
+            with get_db_context() as db:
                 chat_repo = ChatRepository(db)
                 
                 sessions = chat_repo.get_sessions_with_messages(

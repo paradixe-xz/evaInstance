@@ -83,10 +83,21 @@ def create_tables():
 
 from contextlib import contextmanager
 
-@contextmanager
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency to get database session
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def get_db_context() -> Generator[Session, None, None]:
+    """
+    Context manager for database session
     """
     db = SessionLocal()
     try:
