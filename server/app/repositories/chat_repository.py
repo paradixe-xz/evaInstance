@@ -127,7 +127,11 @@ class MessageRepository(BaseRepository[Message]):
         raw_content: Optional[str] = None,
         channel: str = "whatsapp",
         external_id: Optional[str] = None,
-        subject: Optional[str] = None
+        subject: Optional[str] = None,
+        media_url: Optional[str] = None,
+        media_mime_type: Optional[str] = None,
+        media_local_path: Optional[str] = None,
+        media_filename: Optional[str] = None
     ) -> Message:
         """Create a new message"""
         message_data = {
@@ -141,7 +145,11 @@ class MessageRepository(BaseRepository[Message]):
             "timestamp": datetime.utcnow(),
             "channel": channel,
             "external_id": external_id,
-            "subject": subject
+            "subject": subject,
+            "media_url": media_url,
+            "media_mime_type": media_mime_type,
+            "media_local_path": media_local_path,
+            "media_filename": media_filename
         }
         return self.create(message_data)
     
