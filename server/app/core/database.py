@@ -81,6 +81,9 @@ def create_tables():
         raise
 
 
+from contextlib import contextmanager
+
+@contextmanager
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency to get database session

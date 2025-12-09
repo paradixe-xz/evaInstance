@@ -680,7 +680,7 @@ class ChatService:
                         "name": user.name,
                         "is_active": user.is_active,
                         "total_messages": user.total_messages,
-                        "last_activity": user.last_activity.isoformat() if user.last_activity else None
+                        "last_activity": user.last_activity_date.isoformat() if user.last_activity_date else None
                     },
                     "messages": [
                         {
