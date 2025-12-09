@@ -753,13 +753,15 @@ class ChatService:
                     })
                 
                 # Get or create active session
-                active_session = chat_repo.get_active_session(user.id)
+                active_session = chat_repo.get_active_session_for_user(user.id)
                 if not active_session:
-                    active_session = chat_repo.create_session({
-                        "user_id": user.id,
-                        "status": ChatSessionStatus.ACTIVE,
-                        "started_at": datetime.utcnow()
-                    })
+                    session_id = f"session_{user.id}_{int(datetime.utcnow().timestamp())}"
+                    active_session = chat_repo.create_session(
+                        user_id=user.id,
+                        session_id=session_id,
+                        ai_personality="ana",
+                        channel="whatsapp"
+                    )
                 
                 # Save outgoing message
                 content = f"[Template: {template_name}]"
