@@ -13,6 +13,9 @@ from ....services.chat_service import ChatService
 from ....repositories.user_repository import UserRepository
 from ....repositories.chat_repository import ChatRepository, MessageRepository
 from ....schemas.chat import (
+    ChatHistoryRequest,
+    ChatHistoryResponse,
+    ActiveSessionsResponse,
     ChatStatsResponse,
     UserStatsRequest,
     UserStatsResponse,
