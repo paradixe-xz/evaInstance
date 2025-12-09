@@ -89,17 +89,18 @@ async def receive_webhook(
                     
                     if messages:
                         message = messages[0]
-                        if message.get("type") == "text":
-                            from_number = message.get("from")
-                            text_body = message.get("text", {}).get("body", "")
-                            
-                            # Process message in background
-                            background_tasks.add_task(_process_webhook_message, webhook_data)
-                            
-                            return MessageProcessingResponse(
-                                status="received",
-                                note="Message queued for processing"
-                            )
+                        message_type = message.get("type")
+                        
+                        logger.info(f"📨 Message type detected: {message_type}")
+                        
+                        # Process ALL message types (text, image, document, audio, video, etc.)
+                        # The ChatService will handle each type appropriately
+                        background_tasks.add_task(_process_webhook_message, webhook_data)
+                        
+                        return MessageProcessingResponse(
+                            status="received",
+                            note=f"{message_type.capitalize()} message queued for processing"
+                        )
         
         # Check if it's a Meta test format (Facebook Messenger style)
         elif webhook_data.get("field") == "messages":
