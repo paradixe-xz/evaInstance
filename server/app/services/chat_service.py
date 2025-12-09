@@ -194,6 +194,7 @@ class ChatService:
 
             # --- Media Handling (Incoming) ---
             additional_context = ""
+            media_metadata = None  # Initialize for all message types
             
             if message_type == "document":
                 document = parsed_message.get("document", {})
