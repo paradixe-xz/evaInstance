@@ -620,18 +620,104 @@ class ChatService:
                     "user_id": user.id  # Required field
                 })
                 
-                return {
-                    "status": "sent",
-                    "user_id": user.id,
-                    "session_id": active_session.id,
-                    "message_id": outgoing_message.id,
-                    "whatsapp_response": whatsapp_response
-                }
+                db.commit()
                 
+                return {
+                    "status": "success", 
+                    "message_id": outgoing_message.id,
+                    "whatsapp_id": outgoing_message.whatsapp_message_id
+                }
         except Exception as e:
-            error_msg = f"Error sending message to {phone_number}: {str(e)}"
-            logger.error(error_msg)
-            raise ChatHistoryError(error_msg, error_code="SEND_MESSAGE_FAILED")
+            logger.error(f"Send message error: {str(e)}")
+            raise
+
+    def send_template_message(
+        self, 
+        phone_number: str, 
+        template_name: str, 
+        language_code: str = "es",
+        parameters: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a template message to a user
+        
+        Args:
+            phone_number: Recipient phone number
+            template_name: Template name
+            language_code: Language code (default: es)
+            parameters: Template parameters
+            
+        Returns:
+            Send result
+        """
+        try:
+            # Validate phone number
+            formatted_phone = self.whatsapp_service.validate_phone_number(phone_number)
+            
+            # Send template via WhatsApp
+            whatsapp_response = self.whatsapp_service.send_template_message(
+                to=formatted_phone,
+                template_name=template_name,
+                language_code=language_code,
+                parameters=parameters
+            )
+            
+            with get_db_context() as db:
+                user_repo = UserRepository(db)
+                chat_repo = ChatRepository(db)
+                message_repo = MessageRepository(db)
+                
+                # Get or create user
+                user = user_repo.get_by_phone_number(formatted_phone)
+                if not user:
+                    user = user_repo.create({
+                        "phone_number": formatted_phone,
+                        "whatsapp_id": formatted_phone,
+                        "name": f"User {formatted_phone[-4:]}",
+                        "is_active": True,
+                        "language": language_code
+                    })
+                
+                # Get or create active session
+                active_session = chat_repo.get_active_session(user.id)
+                if not active_session:
+                    active_session = chat_repo.create_session({
+                        "user_id": user.id,
+                        "status": ChatSessionStatus.ACTIVE,
+                        "started_at": datetime.utcnow()
+                    })
+                
+                # Save outgoing message
+                content = f"[Template: {template_name}]"
+                if parameters:
+                    content += f" Params: {', '.join(parameters)}"
+
+                outgoing_message = message_repo.create({
+                    "chat_session_id": active_session.id,
+                    "whatsapp_message_id": whatsapp_response.get("messages", [{}])[0].get("id"),
+                    "direction": MessageDirection.OUTGOING,
+                    "message_type": "template",
+                    "content": content,
+                    "raw_content": str({
+                        "whatsapp_response": whatsapp_response,
+                        "template_name": template_name,
+                        "parameters": parameters,
+                        "bulk_send": True
+                    }),
+                    "timestamp": datetime.utcnow(),
+                    "user_id": user.id
+                })
+                
+                db.commit()
+                
+                return {
+                    "status": "success", 
+                    "message_id": outgoing_message.id,
+                    "whatsapp_id": outgoing_message.whatsapp_message_id
+                }
+        except Exception as e:
+            logger.error(f"Send template message error: {str(e)}")
+            raise
     
     def get_chat_history(
         self,

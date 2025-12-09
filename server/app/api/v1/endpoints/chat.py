@@ -254,8 +254,91 @@ async def send_bulk_message(request: BulkMessageRequest):
         logger.error(f"Bulk message error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+    except Exception as e:
+        logger.error(f"Bulk message error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.delete("/session/{session_id}")
+
+from fastapi import UploadFile, File, Form
+import csv
+import io
+
+@router.post("/bulk-template", response_model=BulkMessageResponse)
+async def send_bulk_template(
+    file: UploadFile = File(...),
+    template_name: str = Form(...)
+):
+    """
+    Send a template message to multiple users from CSV
+    """
+    try:
+        logger.info(f"Processing bulk template '{template_name}' from CSV")
+        
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="File must be a CSV")
+        
+        content = await file.read()
+        try:
+            decoded_content = content.decode('utf-8')
+        except UnicodeDecodeError:
+            decoded_content = content.decode('latin-1')
+            
+        csv_reader = csv.DictReader(io.StringIO(decoded_content))
+        
+        # Identify phone column
+        headers = csv_reader.fieldnames
+        if not headers:
+            raise HTTPException(status_code=400, detail="CSV file is empty or invalid")
+            
+        phone_column = next(
+            (h for h in headers if h.lower() in ['phone', 'phone_number', 'telefono', 'teléfono', 'celular', 'mobile', 'whatsapp']), 
+            None
+        )
+        
+        if not phone_column:
+             raise HTTPException(status_code=400, detail=f"Could not find phone number column. Headers found: {headers}")
+             
+        successful = []
+        failed = []
+        errors = []
+        
+        for row in csv_reader:
+            phone_number = row.get(phone_column)
+            if not phone_number:
+                continue
+                
+            try:
+                # Clean phone number logic if needed, but service handles validation
+                result = chat_service.send_template_message(
+                    phone_number=phone_number,
+                    template_name=template_name,
+                    language_code="es" # Default to Spanish
+                )
+                successful.append(phone_number)
+                logger.info(f"Template sent successfully to {phone_number}")
+                
+            except Exception as e:
+                error_msg = str(e)
+                failed.append({
+                    "phone_number": phone_number,
+                    "error": error_msg
+                })
+                errors.append(f"{phone_number}: {error_msg}")
+                logger.error(f"Failed to send template to {phone_number}: {error_msg}")
+        
+        return BulkMessageResponse(
+            total_sent=len(successful),
+            successful=successful,
+            failed=failed,
+            errors=errors
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk template error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 async def end_chat_session(session_id: int, db: Session = Depends(get_db)):
     """
     End a chat session

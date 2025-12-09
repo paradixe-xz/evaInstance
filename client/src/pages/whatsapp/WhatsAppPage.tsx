@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Send, Phone, MoreVertical, User, Check, CheckCheck, Loader2 } from 'lucide-react';
+import { Search, Send, Phone, MoreVertical, User, Check, CheckCheck, Loader2, Upload, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,6 +8,15 @@ import { chatService } from '../../services/api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "../../components/ui/dialog";
 import { cn } from '../../lib/utils';
 
 // Types
@@ -44,6 +53,11 @@ export function WhatsAppPage() {
     const [messageInput, setMessageInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Bulk Template State
+    const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+    const [bulkFile, setBulkFile] = useState<File | null>(null);
+    const [bulkTemplateName, setBulkTemplateName] = useState('ana');
 
     // Fetch users
     const { data: usersData, isLoading: isLoadingUsers } = useQuery({
@@ -90,6 +104,24 @@ export function WhatsAppPage() {
         },
         onError: () => {
             toast.error('Error al cambiar el estado de la IA');
+        }
+    });
+
+    // Bulk Template Mutation
+    const sendBulkTemplateMutation = useMutation({
+        mutationFn: async () => {
+            if (!bulkFile) throw new Error("Debes seleccionar un archivo CSV");
+            return chatService.sendBulkTemplate(bulkFile, bulkTemplateName);
+        },
+        onSuccess: (data) => {
+            toast.success(`Campaña enviada: ${data.total_sent} mensajes enviados, ${data.failed.length} fallidos`);
+            setIsBulkDialogOpen(false);
+            setBulkFile(null);
+            // Refresh users list as new users might have been created
+            queryClient.invalidateQueries({ queryKey: ['chat-users'] });
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.detail || error.message || 'Error al enviar campaña');
         }
     });
 
@@ -141,7 +173,61 @@ export function WhatsAppPage() {
                 {/* Sidebar - Users List */}
                 <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50">
                     <div className="p-4 border-b border-gray-200 bg-white">
-                        <h2 className="text-lg font-semibold mb-4">Mensajes</h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold">Mensajes</h2>
+                            <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" title="Enviar Campaña (CSV)">
+                                        <Upload className="h-4 w-4" />
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Enviar Campaña Masiva</DialogTitle>
+                                        <DialogDescription>
+                                            Sube un archivo CSV con los números de teléfono para enviar la plantilla.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Nombre de la Plantilla</label>
+                                            <Input
+                                                value={bulkTemplateName}
+                                                onChange={(e) => setBulkTemplateName(e.target.value)}
+                                                placeholder="Nombre de la template"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Archivo CSV</label>
+                                            <div className="flex items-center gap-2 border rounded-md p-2">
+                                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                                <input
+                                                    type="file"
+                                                    accept=".csv"
+                                                    onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                                                    className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                El CSV debe tener una columna llamada "phone", "telefono", o similar.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setIsBulkDialogOpen(false)}>Cancelar</Button>
+                                        <Button
+                                            onClick={() => sendBulkTemplateMutation.mutate()}
+                                            disabled={!bulkFile || sendBulkTemplateMutation.isPending}
+                                        >
+                                            {sendBulkTemplateMutation.isPending && (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            )}
+                                            Enviar
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input

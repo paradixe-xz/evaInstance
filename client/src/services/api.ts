@@ -192,6 +192,23 @@ export const chatService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  sendBulkTemplate: async (file: File, templateName: string) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('template_name', templateName);
+
+      const response = await api.post(API_ENDPOINTS.CHAT.BULK_TEMPLATE, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 
