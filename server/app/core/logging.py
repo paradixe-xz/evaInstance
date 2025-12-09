@@ -16,7 +16,7 @@ settings = get_settings()
 def setup_logging(
     log_level: Optional[str] = None,
     log_file: Optional[str] = None,
-    enable_console: bool = False  # Disabled by default
+    enable_console: bool = True  # Enabled by default for debugging
 ) -> logging.Logger:
     """
     Setup logging configuration
@@ -76,11 +76,11 @@ def setup_logging(
     logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
     logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
     
-    # Disable uvicorn access logs
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    # Enable uvicorn access logs for debugging
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
     
-    # Set root logger level to WARNING to reduce overall verbosity
+    # Set root logger level
     if not enable_console:
         logging.getLogger().setLevel(logging.WARNING)
     
