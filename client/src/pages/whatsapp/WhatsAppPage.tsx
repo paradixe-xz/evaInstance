@@ -146,10 +146,17 @@ export function WhatsAppPage() {
         });
     };
 
-    const filteredUsers = usersData?.users.filter((user: ChatUser) =>
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.phone_number.includes(searchTerm)
-    ) || [];
+    const filteredUsers = usersData?.users
+        .filter((user: ChatUser) =>
+            user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user.phone_number.includes(searchTerm)
+        )
+        .sort((a: ChatUser, b: ChatUser) => {
+            // Sort by last_activity, most recent first
+            if (!a.last_activity) return 1;
+            if (!b.last_activity) return -1;
+            return new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime();
+        }) || [];
 
     const formatTime = (dateString: string) => {
         return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
