@@ -129,7 +129,19 @@ class BulkMessageRequest(BaseModel):
 
 class BulkMessageResponse(BaseModel):
     """Schema for bulk message response"""
-    total_sent: int
     successful: List[str]
     failed: List[Dict[str, str]]
     errors: List[str]
+
+
+class SendMessageRequest(BaseModel):
+    """Schema for sending a single message"""
+    phone_number: str = Field(..., description="Recipient phone number")
+    message: str = Field(..., min_length=1, max_length=4096, description="Message content")
+    
+    @validator("phone_number")
+    def validate_phone_number(cls, v):
+        clean_number = "".join(filter(str.isdigit, v))
+        if len(clean_number) < 10:
+            raise ValueError("Phone number must have at least 10 digits")
+        return v

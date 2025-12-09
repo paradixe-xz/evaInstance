@@ -201,7 +201,19 @@ class ChatService:
                 user = user_repo.get_by_whatsapp_id(user_id)
                 
                 if user and user.ai_paused:
-                    logger.info(f"AI is paused for user {user.phone_number}, skipping AI generation")
+                    logger.info(f"AI is paused for user {user.phone_number}, skipping AI generation but saving message")
+                    
+                    # Save message even if AI is paused
+                    chat_session = self._get_or_create_chat_session(user_id)
+                    self._save_message(
+                        chat_session_id=chat_session.id,
+                        content=user_message,
+                        direction=MessageDirection.INCOMING,
+                        message_type="text",
+                        whatsapp_message_id=parsed_message.get("message_id"),
+                        user_id=chat_session.user_id
+                    )
+                    
                     return {
                         "status": "ignored",
                         "user_id": user.id,

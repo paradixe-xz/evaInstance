@@ -13,14 +13,12 @@ from ....services.chat_service import ChatService
 from ....repositories.user_repository import UserRepository
 from ....repositories.chat_repository import ChatRepository, MessageRepository
 from ....schemas.chat import (
-    ChatHistoryRequest,
-    ChatHistoryResponse,
-    ActiveSessionsResponse,
     ChatStatsResponse,
     UserStatsRequest,
     UserStatsResponse,
     BulkMessageRequest,
-    BulkMessageResponse
+    BulkMessageResponse,
+    SendMessageRequest
 )
 
 logger = get_logger(__name__)
@@ -28,6 +26,31 @@ router = APIRouter()
 
 # Initialize services
 chat_service = ChatService()
+
+
+@router.post("/message")
+async def send_message(request: SendMessageRequest):
+    """
+    Send a message to a user
+    """
+    try:
+        logger.info(f"Sending message to {request.phone_number}")
+        
+        result = chat_service.send_message(
+            phone_number=request.phone_number,
+            message=request.message
+        )
+        
+        return result
+        
+    except ValidationError as e:
+        logger.warning(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    except Exception as e:
+        logger.error(f"Send message error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
