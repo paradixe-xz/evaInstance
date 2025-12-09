@@ -282,6 +282,7 @@ async def get_users(
                     "name": user.name,
                     "is_active": user.is_active,
                     "total_messages": user.total_messages,
+                    "ai_paused": user.ai_paused,
                     "last_activity": user.last_activity_date.isoformat() if user.last_activity_date else None,
                     "created_at": user.created_at.isoformat()
                 }
